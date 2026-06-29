@@ -2954,90 +2954,82 @@ async function approveIzin(docId, action){
   if(btn){btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';btn.disabled=true;}
   try{
     await firebaseDb.collection('izin').doc(docId).set({
-      status:action,
-      note:note,
+      status:action, note:note,
       approvedBy:currentUser?.uid,
       approvedByName:currentUser?.name,
       approvedAt:firebase.firestore.FieldValue.serverTimestamp()
     },{merge:true});
 
-    // ── Jika DISETUJUI: buat record absensi otomatis per tanggal ──────
     if(action === 'approved'){
-      const izinData = allIzinData.find(i=>i.id===docId);
+      // Ambil langsung dari Firestore — jangan andalkan allIzinData di memori
+      const izinDoc = await firebaseDb.collection('izin').doc(docId).get();
+      const izinData = izinDoc.exists ? { id:docId, ...izinDoc.data() } : null;
+      dbgLog('[Izin] data: '+JSON.stringify({jenis:izinData?.jenis,dari:izinData?.dari,sampai:izinData?.sampai,uid:izinData?.uid}));
+
       if(izinData && izinData.dari && izinData.sampai && izinData.uid){
         const absType = IZIN_ABSENCE_TYPE[izinData.jenis] || (officeConfig?.absenceType || ABSENCE_TYPE_CODE);
+        dbgLog('[Izin] absType: '+absType);
         const errors = [];
+        let buatCount = 0;
 
-        // Iterasi setiap tanggal dari 'dari' sampai 'sampai'
         const dStart = new Date(izinData.dari + 'T00:00:00');
         const dEnd   = new Date(izinData.sampai + 'T00:00:00');
-        const today  = getLocalDateStr();
+
+        // Ambil semua absensi user 1x (tidak butuh index)
+        const snapCek = await firebaseDb.collection('absensi').where('uid','==', izinData.uid).get();
+        const absensiSet = new Set(
+          snapCek.docs.map(d=>d.data()).filter(r=>r.type==='masuk'||r.izinAutoFill).map(r=>r.date)
+        );
+        dbgLog('[Izin] tanggal sudah ada absensi: '+JSON.stringify([...absensiSet]));
 
         for(let d = new Date(dStart); d <= dEnd; d.setDate(d.getDate()+1)){
-          // Gunakan tanggal lokal, bukan UTC (toISOString() bisa geser 1 hari di UTC+7)
           const dateStr = getLocalDateStr(d);
-
-          // Cek apakah sudah ada absensi di tanggal ini untuk user ini
-          try{
-            const snapCek = await firebaseDb.collection('absensi')
-              .where('uid','==', izinData.uid)
-              .get();
-            const sudahAda = snapCek.docs.some(doc => {
-              const r = doc.data();
-              return r.date === dateStr && (r.type === 'masuk' || r.izinAutoFill);
-            });
-
-            if(!sudahAda){
-              // Buat record absensi masuk dengan absenceType izin
+          if(!absensiSet.has(dateStr)){
+            try{
               await firebaseDb.collection('absensi').add({
-                uid          : izinData.uid,
-                userName     : izinData.userName || '',
-                date         : dateStr,
-                type         : 'masuk',
-                time         : '00:00',
-                absenceType  : absType,
-                izinAutoFill : true,          // penanda ini dibuat otomatis dari izin
-                izinId       : docId,
-                izinJenis    : izinData.jenis,
-                cabangNama   : officeConfig?.nama || 'Kantor Pusat',
-                fakeGpsScore : 0,
-                gpsWarnings  : [],
-                createdAt    : firebase.firestore.FieldValue.serverTimestamp(),
+                uid:izinData.uid, userName:izinData.userName||'',
+                date:dateStr, type:'masuk', time:'00:00',
+                absenceType:absType, izinAutoFill:true,
+                izinId:docId, izinJenis:izinData.jenis,
+                cabangNama:officeConfig?.nama||'Kantor Pusat',
+                fakeGpsScore:0, gpsWarnings:[],
+                createdAt:firebase.firestore.FieldValue.serverTimestamp(),
               });
+              buatCount++;
+              dbgLog('[Izin] ✓ dibuat: '+dateStr);
+            }catch(eDate){
+              errors.push(dateStr);
+              dbgLog('[Izin] ✗ gagal: '+dateStr+' — '+eDate.message);
             }
-          }catch(eDate){
-            errors.push(dateStr);
+          } else {
+            dbgLog('[Izin] skip (sudah ada): '+dateStr);
           }
         }
-
         if(errors.length){
-          showToast(`Izin disetujui, tapi gagal isi absensi tgl: ${errors.join(', ')}`, 'warning');
+          showToast('Izin disetujui, gagal isi absensi tgl: '+errors.join(', '),'warning');
         } else {
-          const jmlHari = Math.round((dEnd-dStart)/(1000*60*60*24))+1;
-          showToast(`Izin disetujui! Absensi ${izinData.jenis} (${absType}) otomatis diisi ${jmlHari} hari.`, 'success');
+          showToast('Izin disetujui! '+buatCount+' absensi '+izinData.jenis+' ('+absType+') otomatis dibuat.','success');
         }
       } else {
-        showToast('Pengajuan disetujui!', 'success');
+        dbgLog('[Izin] SKIP: data tidak lengkap');
+        showToast('Pengajuan disetujui!','success');
       }
     } else {
-      showToast('Pengajuan ditolak', 'warning');
+      showToast('Pengajuan ditolak','warning');
     }
-    // ─────────────────────────────────────────────────────────────────
 
-    // Update local data
     const idx=allIzinData.findIndex(i=>i.id===docId);
-    if(idx>=0){
-      allIzinData[idx].status=action;
-      allIzinData[idx].note=note;
-      allIzinData[idx].approvedByName=currentUser?.name;
-    }
+    if(idx>=0){allIzinData[idx].status=action;allIzinData[idx].note=note;allIzinData[idx].approvedByName=currentUser?.name;}
     filteredIzinData=filteredIzinData.map(i=>i.id===docId?{...i,status:action,note,approvedByName:currentUser?.name}:i);
     renderIzinHistory(filteredIzinData,true);
-    // Update badge count
     const pendingCount=allIzinData.filter(i=>i.status==='pending').length;
-    document.getElementById('izin-list-label').textContent=
-      'Semua Pengajuan'+(pendingCount>0?' · '+pendingCount+' menunggu':'');
-  }catch(e){showToast('Gagal: '+e.message,'error');if(btn){btn.innerHTML=action==='approved'?'<i class="fas fa-check"></i> Setujui':'<i class="fas fa-times"></i> Tolak';btn.disabled=false;}}}
+    document.getElementById('izin-list-label').textContent='Semua Pengajuan'+(pendingCount>0?' · '+pendingCount+' menunggu':'');
+  }catch(e){
+    dbgLog('[Izin] ERROR: '+e.message);
+    showToast('Gagal: '+e.message,'error');
+    if(btn){btn.innerHTML=action==='approved'?'<i class="fas fa-check"></i> Setujui':'<i class="fas fa-times"></i> Tolak';btn.disabled=false;}
+  }
+}
 
 
 // LAPORAN
