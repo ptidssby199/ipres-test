@@ -2974,7 +2974,8 @@ async function approveIzin(docId, action){
         const today  = getLocalDateStr();
 
         for(let d = new Date(dStart); d <= dEnd; d.setDate(d.getDate()+1)){
-          const dateStr = d.toISOString().slice(0,10);
+          // Gunakan tanggal lokal, bukan UTC (toISOString() bisa geser 1 hari di UTC+7)
+          const dateStr = getLocalDateStr(d);
 
           // Cek apakah sudah ada absensi di tanggal ini untuk user ini
           try{
