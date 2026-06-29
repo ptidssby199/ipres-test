@@ -2987,13 +2987,25 @@ async function approveIzin(docId, action){
           if(!absensiSet.has(dateStr)){
             try{
               await firebaseDb.collection('absensi').add({
-                uid:izinData.uid, userName:izinData.userName||'',
-                date:dateStr, type:'masuk', time:'00:00',
-                absenceType:absType, izinAutoFill:true,
-                izinId:docId, izinJenis:izinData.jenis,
-                cabangNama:officeConfig?.nama||'Kantor Pusat',
-                fakeGpsScore:0, gpsWarnings:[],
-                createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+                uid          : izinData.uid,
+                userName     : izinData.userName || '',
+                date         : dateStr,
+                type         : 'masuk',       // tetap 'masuk' agar muncul di laporan
+                time         : null,          // jam masuk null — bukan absen hadir biasa
+                timePulang   : null,          // jam pulang null
+                checkInMachine : null,        // mesin in null
+                checkOutMachine: null,        // mesin out null
+                lat          : null,
+                lng          : null,
+                accuracy     : null,
+                absenceType  : absType,
+                izinAutoFill : true,
+                izinId       : docId,
+                izinJenis    : izinData.jenis,
+                cabangNama   : officeConfig?.nama || 'Kantor Pusat',
+                fakeGpsScore : 0,
+                gpsWarnings  : [],
+                createdAt    : firebase.firestore.FieldValue.serverTimestamp(),
               });
               buatCount++;
               dbgLog('[Izin] ✓ dibuat: '+dateStr);
@@ -3119,7 +3131,7 @@ function renderLaporanTable(data){
     const key=(r.uid||'x')+'|'+(r.date||'');
     if(!grouped[key]) grouped[key]={uid:r.uid,name:r.userName||'—',date:r.date,masuk:'—',pulang:'—',lat:null,lng:null,photoMasuk:null,photoPulang:null,accMasuk:null,fakeScoreMasuk:0,latPulang:null,lngPulang:null,accPulang:null,fakeScorePulang:0,gpsWarnings:[],gpsWarningsPulang:[],izinAutoFill:false,izinJenis:null,absenceType:null};
     if(r.type==='masuk'){
-      grouped[key].masuk=r.time;
+      grouped[key].masuk = r.time || '—';
       grouped[key].lat=r.lat; grouped[key].lng=r.lng;
       grouped[key].accMasuk=r.accuracy;
       grouped[key].photoMasuk=r.photoURL||r.photoBase64||null;
@@ -3155,12 +3167,14 @@ function renderLaporanTable(data){
     const d=new Date(r.date||'');
     const tgl=isNaN(d)?r.date:d.getDate()+' '+M[d.getMonth()]+' '+d.getFullYear();
     let dur='—';
-    if(r.masuk!=='—'&&r.pulang!=='—'){
+    if(!r.izinAutoFill && r.masuk!=='—'&&r.pulang!=='—'){
       const[mh,mm]=r.masuk.split(':').map(Number),[ph,pm]=r.pulang.split(':').map(Number),mn=(ph*60+pm)-(mh*60+mm);
       if(mn>0) dur=Math.floor(mn/60)+'j '+(mn%60)+'m';
     }
-    const t = r.masuk!=='—' ? hitungTelat(r.masuk, r.uid, r.date) : null;
-    const telatBadge = !t ? '—'
+    // Baris izin: tidak dihitung telat, tidak ada shift
+    const t = (!r.izinAutoFill && r.masuk!=='—') ? hitungTelat(r.masuk, r.uid, r.date) : null;
+    const telatBadge = r.izinAutoFill ? '—'
+      : !t ? '—'
       : t.telat
         ? '<span class="status-badge badge-telat" style="background:#fee2e2;color:#dc2626">+'+t.display+'</span>'
         : '<span class="status-badge" style="background:#dcfce7;color:#16a34a">Tepat Waktu</span>';
@@ -3171,9 +3185,13 @@ function renderLaporanTable(data){
         : r.pulang==='—'
           ? '<span class="status-badge badge-telat" style="background:#fef9c3;color:#ca8a04">Belum Pulang</span>'
           : '<span class="status-badge badge-hadir">Hadir</span>';
-    const shiftNama = t ? t.shiftNama : '—';
-    const batasMasuk = t ? t.batas : '—';
-    // Tombol bukti foto & lokasi
+    const shiftNama = r.izinAutoFill ? '—' : (t ? t.shiftNama : '—');
+    const batasMasuk = r.izinAutoFill ? '—' : (t ? t.batas : '—');
+    // Jam masuk: jika izin tampilkan kode absenceType, bukan jam
+    const masukDisplay = r.izinAutoFill
+      ? '<span style="font-size:.68rem;color:#7c3aed;font-weight:700">'+( r.absenceType||'—')+'</span>'
+      : r.masuk;
+    // Tombol bukti foto & lokasi (izin tidak punya)
     const hasPhoto = r.photoMasuk || r.photoPulang;
     const hasLoc = r.lat && r.lng;
     const fakeScore = r.fakeScoreMasuk||0;
@@ -3184,8 +3202,8 @@ function renderLaporanTable(data){
         : '';
     const safeUid=r.uid?r.uid.replace(/'/g,''):'';
     const safeDate=r.date?r.date.replace(/'/g,''):'';
-    const buktiHtml =
-      (hasPhoto ? '<button class="rekap-foto-btn" onclick="lihatDetail(this)" data-uid="'+safeUid+'" data-date="'+safeDate+'" data-tab="masuk"><i class="fas fa-camera"></i> Foto</button> ' : '')
+    const buktiHtml = r.izinAutoFill ? '<span style="color:var(--text-muted);font-size:.72rem">—</span>'
+      : (hasPhoto ? '<button class="rekap-foto-btn" onclick="lihatDetail(this)" data-uid="'+safeUid+'" data-date="'+safeDate+'" data-tab="masuk"><i class="fas fa-camera"></i> Foto</button> ' : '')
       +(hasLoc ? '<button class="rekap-map-btn" onclick="lihatDetail(this)" data-uid="'+safeUid+'" data-date="'+safeDate+'" data-tab="lokasi"><i class="fas fa-map-marker-alt"></i> Peta</button>' : '')
       +(fakeLabel ? '<br><div style="margin-top:3px">'+fakeLabel+'</div>' : '')
       ||'<span style="color:var(--text-muted);font-size:.72rem">—</span>';
@@ -3195,9 +3213,9 @@ function renderLaporanTable(data){
       +'<td style="white-space:nowrap">'+tgl+'</td>'
       +'<td style="font-size:.72rem;color:var(--text-muted)">'+shiftNama+'</td>'
       +'<td style="font-size:.75rem;color:var(--text-muted)">'+batasMasuk+'</td>'
-      +'<td style="color:var(--green);font-weight:600">'+r.masuk+'</td>'
+      +'<td style="color:var(--green);font-weight:600">'+masukDisplay+'</td>'
       +'<td>'+telatBadge+'</td>'
-      +'<td style="color:var(--accent);font-weight:600">'+r.pulang+'</td>'
+      +'<td style="color:var(--accent);font-weight:600">'+(r.izinAutoFill?'—':r.pulang)+'</td>'
       +'<td>'+dur+'</td>'
       +'<td>'+st+'</td>'
       +'<td style="min-width:80px">'+buktiHtml+'</td>'
