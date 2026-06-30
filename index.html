@@ -2852,6 +2852,16 @@ function renderIzinHistory(data, isAdmin=false){
       ? '<div style="font-size:.7rem;color:var(--text-muted);margin-top:4px"><i class="fas fa-user-check" style="margin-right:3px"></i>'+(i.status==='approved'?'Disetujui':'Ditolak')+' oleh '+i.approvedByName+'</div>'
       : '';
 
+    // Tombol delete — hanya admin, muncul di semua status
+    const deleteHtml = isAdmin
+      ? `<div style="margin-top:8px;text-align:right">
+           <button onclick="deleteIzin('${i.id}','${(i.userName||'').replace(/'/g,"\\'")}','${i.dari||''}','${i.sampai||''}','${i.uid||''}')"
+             style="padding:5px 10px;border-radius:7px;border:1.5px solid var(--red);background:var(--red-light);color:var(--red);font-size:.72rem;font-weight:700;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;display:inline-flex;align-items:center;gap:5px">
+             <i class="fas fa-trash"></i> Hapus Pengajuan
+           </button>
+         </div>`
+      : '';
+
     return '<div class="izin-list-card">'
       +'<div class="izin-card-top">'
       +'<div class="izin-list-info" style="flex:1">'
@@ -2866,8 +2876,72 @@ function renderIzinHistory(data, isAdmin=false){
       +statusBadge
       +'</div>'
       +approveHtml
+      +deleteHtml
       +'</div>';
   }).join('');
+}
+
+async function deleteIzin(docId, userName, dari, sampai, uid){
+  if(!hasRole('admin')){showToast('Akses ditolak — hanya Admin','error');return;}
+  if(!confirm(`Hapus pengajuan izin ${userName} (${dari} s/d ${sampai})?\n\nAbsensi yang dibuat otomatis dari izin ini juga akan dihapus.`)) return;
+
+  const btn = event?.target?.closest('button');
+  if(btn){ btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Menghapus...'; btn.disabled=true; }
+
+  try{
+    let hapusAbsenCount = 0;
+    let hapusAbsenErrors = [];
+
+    // Jika izin sudah approved dan punya uid, hapus absensi izinAutoFill yang dibuat dari izin ini
+    if(uid && dari && sampai){
+      const snapAbsen = await firebaseDb.collection('absensi')
+        .where('uid','==', uid)
+        .get();
+
+      // Filter hanya absensi yang dibuat dari izin ini (izinId === docId)
+      const toDelete = snapAbsen.docs.filter(d => {
+        const r = d.data();
+        return r.izinAutoFill === true && r.izinId === docId;
+      });
+
+      // Hapus satu per satu (Firestore tidak support batch delete langsung di client)
+      for(const doc of toDelete){
+        try{
+          await doc.ref.delete();
+          hapusAbsenCount++;
+          dbgLog('[DeleteIzin] ✓ absensi dihapus: '+doc.data().date);
+        }catch(e){
+          hapusAbsenErrors.push(doc.data().date||doc.id);
+          dbgLog('[DeleteIzin] ✗ gagal hapus absensi: '+e.message);
+        }
+      }
+    }
+
+    // Hapus dokumen izin
+    await firebaseDb.collection('izin').doc(docId).delete();
+
+    // Update local data
+    allIzinData = allIzinData.filter(i=>i.id!==docId);
+    filteredIzinData = filteredIzinData.filter(i=>i.id!==docId);
+    renderIzinHistory(filteredIzinData, true);
+
+    // Update badge pending count
+    const pendingCount = allIzinData.filter(i=>i.status==='pending').length;
+    const labelEl = document.getElementById('izin-list-label');
+    if(labelEl) labelEl.textContent = 'Semua Pengajuan'+(pendingCount>0?' · '+pendingCount+' menunggu':'');
+
+    if(hapusAbsenErrors.length){
+      showToast(`Izin dihapus. ${hapusAbsenCount} absensi dihapus, ${hapusAbsenErrors.length} gagal: ${hapusAbsenErrors.join(', ')}`, 'warning');
+    } else if(hapusAbsenCount > 0){
+      showToast(`Izin & ${hapusAbsenCount} data absensi berhasil dihapus`, 'success');
+    } else {
+      showToast('Pengajuan izin berhasil dihapus', 'success');
+    }
+  }catch(e){
+    dbgLog('[DeleteIzin] ERROR: '+e.message);
+    showToast('Gagal hapus: '+e.message,'error');
+    if(btn){ btn.innerHTML='<i class="fas fa-trash"></i> Hapus Pengajuan'; btn.disabled=false; }
+  }
 }
 let suratDokterDataUrl=null;
 function toggleSuratDokterField(){
@@ -3155,7 +3229,7 @@ function renderLaporanTable(data){
       if(r.izinAutoFill){ grouped[key].izinAutoFill=true; grouped[key].izinJenis=r.izinJenis||null; grouped[key].absenceType=r.absenceType||null; }
     }
     if(r.type==='pulang'){
-      grouped[key].pulang=r.time;
+      grouped[key].pulang = r.time || '—';
       grouped[key].photoPulang=r.photoURL||r.photoBase64||null;
       grouped[key].latPulang=r.lat||null;
       grouped[key].lngPulang=r.lng||null;
@@ -3194,7 +3268,10 @@ function renderLaporanTable(data){
         ? '<span class="status-badge badge-telat" style="background:#fee2e2;color:#dc2626">+'+t.display+'</span>'
         : '<span class="status-badge" style="background:#dcfce7;color:#16a34a">Tepat Waktu</span>';
     const st = r.izinAutoFill
-      ? `<span class="status-badge" style="background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe" title="${r.absenceType||''}"><i class="fas fa-file-medical" style="margin-right:3px"></i>${r.izinJenis||'Izin'}</span>`
+      ? `<span class="status-badge" style="background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;display:flex;flex-direction:column;gap:2px;align-items:flex-start" title="${r.absenceType||''}">
+           <span><i class="fas fa-file-medical" style="margin-right:3px"></i>${r.izinJenis||'Izin'}</span>
+           ${r.absenceType ? '<span style="font-size:.62rem;opacity:.8;font-weight:600">'+r.absenceType+'</span>' : ''}
+         </span>`
       : r.masuk==='—'
         ? '<span class="status-badge badge-absen">Tidak Hadir</span>'
         : r.pulang==='—'
@@ -3202,10 +3279,9 @@ function renderLaporanTable(data){
           : '<span class="status-badge badge-hadir">Hadir</span>';
     const shiftNama = r.izinAutoFill ? '—' : (t ? t.shiftNama : '—');
     const batasMasuk = r.izinAutoFill ? '—' : (t ? t.batas : '—');
-    // Jam masuk: jika izin tampilkan kode absenceType, bukan jam
-    const masukDisplay = r.izinAutoFill
-      ? '<span style="font-size:.68rem;color:#7c3aed;font-weight:700">'+( r.absenceType||'—')+'</span>'
-      : r.masuk;
+    // Jam masuk & pulang: izin = '—', normal = jam sebenarnya
+    const masukDisplay = r.izinAutoFill ? '—' : (r.masuk || '—');
+    const pulangDisplay = r.izinAutoFill ? '—' : (r.pulang || '—');
     // Tombol bukti foto & lokasi (izin tidak punya)
     const hasPhotoMasuk = !!r.photoMasuk;
     const hasPhotoPulang = !!r.photoPulang;
@@ -3250,7 +3326,7 @@ function renderLaporanTable(data){
       +'<td style="font-size:.75rem;color:var(--text-muted)">'+batasMasuk+'</td>'
       +'<td style="color:var(--green);font-weight:600">'+masukDisplay+'</td>'
       +'<td>'+telatBadge+'</td>'
-      +'<td style="color:var(--accent);font-weight:600">'+(r.izinAutoFill?'—':r.pulang)+'</td>'
+      +'<td style="color:var(--accent);font-weight:600">'+pulangDisplay+'</td>'
       +'<td>'+dur+'</td>'
       +'<td>'+st+'</td>'
       +'<td style="min-width:80px">'+buktiHtml+'</td>'
