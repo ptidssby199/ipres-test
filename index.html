@@ -1491,10 +1491,12 @@ async function loadMyAbsensiToday(){
     const actDocs=todayDocs.sort((a,b)=>(a.time||'')>(b.time||'')?1:-1);
     c.innerHTML=actDocs.map(r=>{return`<div class="activity-item"><div class="activity-dot" style="background:${r.type==='masuk'?'#16a34a':'#f97316'}"></div><div class="activity-info"><div class="a-title">${r.type==='masuk'?'Absen Masuk':'Absen Pulang'}</div><div class="a-sub"><i class="fas fa-clock" style="font-size:.7rem"></i> ${r.time}</div></div><div class="activity-time">${r.lat?(r.lat.toFixed(4)+','+r.lng.toFixed(4)):'—'}</div></div>`;}).join('');
     actDocs.forEach(r=>{if(r.type==='masuk'){document.getElementById('stat-masuk').textContent=r.time;document.getElementById('today-status').textContent='Sudah Absen Masuk ✓';}if(r.type==='pulang'){document.getElementById('stat-pulang').textContent=r.time;document.getElementById('today-status').textContent='Sudah Absen Pulang ✓';}});
-    // Hitung hadir bulan ini dari data yang sudah diambil (filter di JS)
+    // Hitung hadir bulan ini — hanya hadir murni (bukan izinAutoFill)
     const m=new Date().getMonth()+1,y=new Date().getFullYear();
     const start=`${y}-${String(m).padStart(2,'0')}-01`,end=`${y}-${String(m).padStart(2,'0')}-31`;
-    const hadirBln=snap.docs.map(d=>d.data()).filter(d=>d.type==='masuk'&&d.date>=start&&d.date<=end);
+    const hadirBln=snap.docs.map(d=>d.data()).filter(d=>
+      d.type==='masuk' && !d.izinAutoFill && d.time && d.date>=start && d.date<=end
+    );
     const hadirCount=new Set(hadirBln.map(d=>d.date)).size;
     document.getElementById('stat-hadir-bln').textContent=hadirCount;
     document.getElementById('ps-hadir').textContent=hadirCount;
@@ -1575,7 +1577,22 @@ function filterIzinAdmin(el, status){
 }
 
 // ABSEN MODAL
-function openAbsenModal(){
+async function openAbsenModal(){
+  // Cek dulu apakah hari ini ada izin yang sudah approved
+  if(firebaseDb && currentUser?.uid){
+    const today = getLocalDateStr();
+    try{
+      const snapCek = await firebaseDb.collection('absensi')
+        .where('uid','==', currentUser.uid).get();
+      const izinHariIni = snapCek.docs.map(d=>d.data()).find(r=>
+        r.date === today && r.izinAutoFill === true
+      );
+      if(izinHariIni){
+        showToast(`Hari ini sudah tercatat ${izinHariIni.izinJenis||'Izin'} (${izinHariIni.absenceType||''}). Tidak bisa absen.`, 'warning');
+        return; // blokir buka modal
+      }
+    }catch(e){ /* jika gagal query, tetap izinkan buka modal */ }
+  }
   const el=document.getElementById('modal-absen');
   el.style.display='';
   el.classList.add('open');
@@ -4996,7 +5013,7 @@ loadProfileStats = async function() {
       .where('uid','==',currentUser.uid).get();
     const snapMasukDocs2 = snapMasukAll2.docs.filter(d=>{
       const r=d.data();
-      return r.type==='masuk' && r.date && r.date>=start && r.date<=end;
+      return r.type==='masuk' && !r.izinAutoFill && r.time && r.date && r.date>=start && r.date<=end;
     });
     if (snapMasukDocs2.length && allShifts.length) {
       // Hitung telat berdasarkan jadwal masing-masing hari
@@ -5036,35 +5053,27 @@ async function loadProfileStats(){
   const labelBulanEl=document.getElementById('profile-stats-bulan');
   if(labelBulanEl) labelBulanEl.textContent=`Statistik ${namaBulanList[now.getMonth()]} ${y}`;
   try{
-    // Hitung hadir bulan ini (jumlah hari unik yang ada absen masuk)
-    // Hanya 1 where clause → tidak butuh composite index Firestore
-    const snapMasukAll=await firebaseDb.collection('absensi')
-      .where('uid','==',currentUser.uid)
-      .get();
-    const allAbsenDocs=snapMasukAll.docs.map(d=>d.data());
-    const snapMasukDocs=allAbsenDocs.filter(d=>d.type==='masuk'&&d.date&&d.date>=start&&d.date<=end);
-    const hadirDays=new Set(snapMasukDocs.map(d=>d.data().date)).size;
+    const snapAll=await firebaseDb.collection('absensi')
+      .where('uid','==',currentUser.uid).get();
+    const allAbsenDocs=snapAll.docs.map(d=>d.data());
+    const bulanDocs=allAbsenDocs.filter(d=>d.date&&d.date>=start&&d.date<=end);
+
+    // Hadir MURNI = type masuk, bukan izinAutoFill, ada jam masuk
+    const hadirMurniDocs=bulanDocs.filter(d=>d.type==='masuk'&&!d.izinAutoFill&&d.time);
+    const hadirDays=new Set(hadirMurniDocs.map(d=>d.date)).size;
     document.getElementById('ps-hadir').textContent=hadirDays;
     document.getElementById('stat-hadir-bln').textContent=hadirDays;
 
-    // Hitung telat: masuk setelah jam 08:30
+    // Telat: dari absen hadir murni saja (pakai batas default, override nanti oleh jadwal)
     const BATAS_TELAT='08:30';
     let telatCount=0;
-    snapMasukDocs.forEach(d=>{
-      const r=d.data();
-      if(r.time && r.time>BATAS_TELAT) telatCount++;
-    });
+    hadirMurniDocs.forEach(d=>{ if(d.time&&d.time>BATAS_TELAT) telatCount++; });
     document.getElementById('ps-telat').textContent=telatCount;
 
-    // Hitung ijin bulan ini
-    const snapIjinAll=await firebaseDb.collection('izin')
-      .where('uid','==',currentUser.uid)
-      .get();
-    const ijinCount=snapIjinAll.docs.filter(d=>{
-      const dr=d.data().dari;
-      return dr && dr>=start && dr<=end;
-    }).length;
-    document.getElementById('ps-ijin').textContent=ijinCount;
+    // Ijin = izinAutoFill bulan ini (jumlah hari unik, bukan jumlah dokumen)
+    const izinDocs=bulanDocs.filter(d=>d.izinAutoFill===true);
+    const izinDays=new Set(izinDocs.map(d=>d.date)).size;
+    document.getElementById('ps-ijin').textContent=izinDays;
 
   }catch(e){ console.error('loadProfileStats error:',e); }
 }
