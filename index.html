@@ -1692,16 +1692,17 @@ async function doFingerprintVerif(){
     });
 
     if(cred){
-      verifMethod='fingerprint';verifDone=true;
-      showVerifStatus('success','✅ Fingerprint terverifikasi! Selfie opsional untuk bukti tambahan.');
+      verifMethod='fingerprint';
+      // PENTING: fingerprint TIDAK otomatis verifDone=true.
+      // Selfie + verifikasi wajah tetap WAJIB dilakukan setelah ini.
+      showVerifStatus('success','✅ Fingerprint terverifikasi! Lanjutkan dengan selfie wajib di bawah ini.');
       btn.innerHTML='<i class="fas fa-check"></i> Terverifikasi';
-      // Aktifkan selfie sebagai foto bukti tambahan (opsional)
       document.getElementById('verif-selfie-section').style.display='block';
-      document.getElementById('verif-selfie-section').querySelector('div').innerHTML='<i class="fas fa-camera" style="color:#0891b2"></i> <strong style="color:#0891b2">Selfie Bukti (Opsional)</strong> — Ambil foto untuk bukti tambahan absensi';
+      document.getElementById('verif-selfie-section').querySelector('div').innerHTML='<i class="fas fa-camera" style="color:#0891b2"></i> <strong style="color:#0891b2">Selfie Wajib</strong> — Foto + verifikasi wajah tetap diperlukan untuk submit absen';
       setTimeout(startCamera,400);
+      // Submit TETAP terkunci sampai selfie + verifikasi wajah selesai
       const btnSubmit=document.getElementById('btn-submit-absen');
-      btnSubmit.disabled=false;btnSubmit.style.opacity='1';
-      btnSubmit.style.background='var(--green)';
+      btnSubmit.disabled=true;btnSubmit.style.opacity='.5';
     }
   }catch(err){
     btn.disabled=false;btn.innerHTML='<i class="fas fa-fingerprint"></i> Verifikasi dengan Fingerprint';
@@ -1731,11 +1732,14 @@ async function doFingerprintVerifGet(){
       publicKey:{challenge,userVerification:'required',timeout:60000,rpId}
     });
     if(cred){
-      verifMethod='fingerprint';verifDone=true;
-      showVerifStatus('success','✅ Fingerprint terverifikasi!');
+      verifMethod='fingerprint';
+      // Fingerprint TIDAK otomatis verifDone=true — selfie wajib tetap berlaku
+      showVerifStatus('success','✅ Fingerprint terverifikasi! Lanjutkan dengan selfie wajib.');
       btn.innerHTML='<i class="fas fa-check"></i> Terverifikasi';
+      document.getElementById('verif-selfie-section').style.display='block';
+      setTimeout(startCamera,400);
       const btnSubmit=document.getElementById('btn-submit-absen');
-      btnSubmit.disabled=false;btnSubmit.style.opacity='1';btnSubmit.style.background='var(--green)';
+      btnSubmit.disabled=true;btnSubmit.style.opacity='.5';
     }
   }catch(e){
     showVerifStatus('warning','⚠️ Fingerprint tidak berhasil. Gunakan Selfie.');
@@ -1773,7 +1777,17 @@ function switchToFingerprintVerif(){
 
 async function doSubmitAbsen(){
   if(!selectedAbsenType){showToast('Pilih jenis absen dulu','warning');return;}
-  if(!verifDone&&!capturedPhoto){showToast('Selesaikan verifikasi dulu','warning');return;}
+  // WAJIB: foto selfie harus ada — fingerprint tidak menggantikan ini
+  if(!capturedPhoto){
+    showToast('Foto selfie wajib diambil sebelum submit absen','error');
+    showVerifStatus('error','❌ Selfie wajib! Silakan ambil foto terlebih dahulu.');
+    return;
+  }
+  // WAJIB: verifikasi wajah harus selesai dan COCOK (bukan sekadar fingerprint)
+  if(!verifDone){
+    showToast('Verifikasi wajah belum selesai','warning');
+    return;
+  }
   await submitAbsen(selectedAbsenType);
 }
 function initAbsenMap(){
