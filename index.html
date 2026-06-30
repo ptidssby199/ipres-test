@@ -1578,21 +1578,6 @@ function filterIzinAdmin(el, status){
 
 // ABSEN MODAL
 async function openAbsenModal(){
-  // Cek dulu apakah hari ini ada izin yang sudah approved
-  if(firebaseDb && currentUser?.uid){
-    const today = getLocalDateStr();
-    try{
-      const snapCek = await firebaseDb.collection('absensi')
-        .where('uid','==', currentUser.uid).get();
-      const izinHariIni = snapCek.docs.map(d=>d.data()).find(r=>
-        r.date === today && r.izinAutoFill === true
-      );
-      if(izinHariIni){
-        showToast(`Hari ini sudah tercatat ${izinHariIni.izinJenis||'Izin'} (${izinHariIni.absenceType||''}). Tidak bisa absen.`, 'warning');
-        return; // blokir buka modal
-      }
-    }catch(e){ /* jika gagal query, tetap izinkan buka modal */ }
-  }
   const el=document.getElementById('modal-absen');
   el.style.display='';
   el.classList.add('open');
@@ -1629,9 +1614,35 @@ function goToStep(n){
   if(n===3){ buildConfirmSummary(); resetVerifState(); }
 }
 
-function pilihJenisAbsen(type){
+async function pilihJenisAbsen(type){
+  // Cek apakah hari ini ada izin approved — blokir di sini, bukan di openModal
+  if(firebaseDb && currentUser?.uid){
+    const today = getLocalDateStr();
+    try{
+      const snapCek = await firebaseDb.collection('absensi')
+        .where('uid','==', currentUser.uid).get();
+      const izinHariIni = snapCek.docs.map(d=>d.data()).find(r=>
+        r.date === today && r.izinAutoFill === true
+      );
+      if(izinHariIni){
+        const jenis = izinHariIni.izinJenis || 'Izin';
+        const kode  = izinHariIni.absenceType ? ` (${izinHariIni.absenceType})` : '';
+        showToast(`Hari ini tercatat ${jenis}${kode}. Absensi tidak dapat dilakukan.`, 'warning');
+        // Tampilkan info di modal juga
+        const sel = document.getElementById('pilih-absen-selected');
+        sel.style.display = 'block';
+        sel.innerHTML = `⚠️ Hari ini sudah tercatat <strong>${jenis}${kode}</strong> — absensi tidak dapat dilakukan.`;
+        sel.style.background = '#fef9c3';
+        sel.style.color = '#92400e';
+        sel.style.borderRadius = '8px';
+        sel.style.padding = '8px 10px';
+        document.getElementById('btn-step2-next').disabled = true;
+        return; // blokir pilih jenis
+      }
+    }catch(e){ /* jika gagal query, tetap lanjut */ }
+  }
+
   selectedAbsenType=type;
-  // Visual feedback
   const btnM=document.getElementById('btn-pilih-masuk');
   const btnK=document.getElementById('btn-pilih-keluar');
   btnM.style.borderColor=type==='masuk'?'#16a34a':'#bbf7d0';
@@ -1640,6 +1651,7 @@ function pilihJenisAbsen(type){
   btnK.style.background=type==='pulang'?'#ffedd5':'#fff7ed';
   const sel=document.getElementById('pilih-absen-selected');
   sel.style.display='block';
+  sel.style.background='';sel.style.color='';sel.style.padding='';
   sel.innerHTML=type==='masuk'?'✅ Dipilih: <strong>Absen Masuk</strong>':'✅ Dipilih: <strong>Absen Keluar</strong>';
   document.getElementById('btn-step2-next').disabled=false;
 }
