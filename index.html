@@ -2746,6 +2746,7 @@ async function submitAbsen(type){
       fakeGpsScore:currentLocation?.fakeScore||0,
       gpsWarnings:currentLocation?.warnings||[],
       photoBase64: photoToSave || null,
+      verifMethod: verifMethod || 'selfie',
       uid:currentUser?.uid, userName:currentUser?.name, userRole:currentUser?.userRole,
       checkInMachine: type==='masuk' ? ((selectedCabangData||officeConfig)?.checkInMachine || CHECKIN_MACHINE_CODE) : ((selectedCabangData||officeConfig)?.checkOutMachine || CHECKOUT_MACHINE_CODE),
       checkOutMachine: type==='pulang' ? ((selectedCabangData||officeConfig)?.checkOutMachine || CHECKOUT_MACHINE_CODE || null) : null,
@@ -3141,7 +3142,7 @@ function renderLaporanTable(data){
   const grouped={};
   filtered.forEach(r=>{
     const key=(r.uid||'x')+'|'+(r.date||'');
-    if(!grouped[key]) grouped[key]={uid:r.uid,name:r.userName||'—',date:r.date,masuk:'—',pulang:'—',lat:null,lng:null,photoMasuk:null,photoPulang:null,accMasuk:null,fakeScoreMasuk:0,latPulang:null,lngPulang:null,accPulang:null,fakeScorePulang:0,gpsWarnings:[],gpsWarningsPulang:[],izinAutoFill:false,izinJenis:null,absenceType:null};
+    if(!grouped[key]) grouped[key]={uid:r.uid,name:r.userName||'—',date:r.date,masuk:'—',pulang:'—',lat:null,lng:null,photoMasuk:null,photoPulang:null,accMasuk:null,fakeScoreMasuk:0,latPulang:null,lngPulang:null,accPulang:null,fakeScorePulang:0,gpsWarnings:[],gpsWarningsPulang:[],izinAutoFill:false,izinJenis:null,absenceType:null,verifMethodMasuk:null,verifMethodPulang:null};
     if(r.type==='masuk'){
       grouped[key].masuk = r.time || '—';
       grouped[key].lat=r.lat; grouped[key].lng=r.lng;
@@ -3150,6 +3151,7 @@ function renderLaporanTable(data){
       grouped[key].fakeScoreMasuk=r.fakeGpsScore||0;
       grouped[key].gpsWarnings=r.gpsWarnings||[];
       grouped[key].docIdMasuk=r.id;
+      grouped[key].verifMethodMasuk=r.verifMethod||null;
       if(r.izinAutoFill){ grouped[key].izinAutoFill=true; grouped[key].izinJenis=r.izinJenis||null; grouped[key].absenceType=r.absenceType||null; }
     }
     if(r.type==='pulang'){
@@ -3161,6 +3163,7 @@ function renderLaporanTable(data){
       grouped[key].fakeScorePulang=r.fakeGpsScore||0;
       grouped[key].gpsWarningsPulang=r.gpsWarnings||[];
       grouped[key].docIdPulang=r.id;
+      grouped[key].verifMethodPulang=r.verifMethod||null;
     }
   });
   const rows=Object.values(grouped).sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
@@ -3204,7 +3207,8 @@ function renderLaporanTable(data){
       ? '<span style="font-size:.68rem;color:#7c3aed;font-weight:700">'+( r.absenceType||'—')+'</span>'
       : r.masuk;
     // Tombol bukti foto & lokasi (izin tidak punya)
-    const hasPhoto = r.photoMasuk || r.photoPulang;
+    const hasPhotoMasuk = !!r.photoMasuk;
+    const hasPhotoPulang = !!r.photoPulang;
     const hasLoc = r.lat && r.lng;
     const fakeScore = r.fakeScoreMasuk||0;
     const fakeLabel = fakeScore>=4
@@ -3214,11 +3218,30 @@ function renderLaporanTable(data){
         : '';
     const safeUid=r.uid?r.uid.replace(/'/g,''):'';
     const safeDate=r.date?r.date.replace(/'/g,''):'';
+    const fpMasuk = r.verifMethodMasuk==='fingerprint';
+    const fpPulang = r.verifMethodPulang==='fingerprint';
+
+    // Badge bukti MASUK: foto atau fingerprint, render terpisah dari pulang
+    const buktiMasuk = hasPhotoMasuk
+      ? '<button class="rekap-foto-btn" onclick="lihatDetail(this)" data-uid="'+safeUid+'" data-date="'+safeDate+'" data-tab="masuk"><i class="fas fa-camera"></i> Foto Masuk</button>'
+      : fpMasuk
+        ? '<span style="padding:3px 7px;background:#e0f2fe;border:1px solid #7dd3fc;border-radius:5px;color:#0369a1;font-size:.65rem;font-weight:700;display:inline-flex;align-items:center;gap:3px"><i class="fas fa-fingerprint"></i> Fingerprint Masuk</span>'
+        : '';
+    // Badge bukti PULANG: foto atau fingerprint, render terpisah dari masuk
+    const buktiPulang = hasPhotoPulang
+      ? '<button class="rekap-foto-btn" onclick="lihatDetail(this)" data-uid="'+safeUid+'" data-date="'+safeDate+'" data-tab="pulang"><i class="fas fa-camera"></i> Foto Pulang</button>'
+      : fpPulang
+        ? '<span style="padding:3px 7px;background:#e0f2fe;border:1px solid #7dd3fc;border-radius:5px;color:#0369a1;font-size:.65rem;font-weight:700;display:inline-flex;align-items:center;gap:3px"><i class="fas fa-fingerprint"></i> Fingerprint Pulang</span>'
+        : '';
+
     const buktiHtml = r.izinAutoFill ? '<span style="color:var(--text-muted);font-size:.72rem">—</span>'
-      : (hasPhoto ? '<button class="rekap-foto-btn" onclick="lihatDetail(this)" data-uid="'+safeUid+'" data-date="'+safeDate+'" data-tab="masuk"><i class="fas fa-camera"></i> Foto</button> ' : '')
-      +(hasLoc ? '<button class="rekap-map-btn" onclick="lihatDetail(this)" data-uid="'+safeUid+'" data-date="'+safeDate+'" data-tab="lokasi"><i class="fas fa-map-marker-alt"></i> Peta</button>' : '')
-      +(fakeLabel ? '<br><div style="margin-top:3px">'+fakeLabel+'</div>' : '')
-      ||'<span style="color:var(--text-muted);font-size:.72rem">—</span>';
+      : [
+          buktiMasuk,
+          buktiPulang,
+          hasLoc ? '<button class="rekap-map-btn" onclick="lihatDetail(this)" data-uid="'+safeUid+'" data-date="'+safeDate+'" data-tab="lokasi"><i class="fas fa-map-marker-alt"></i> Peta</button>' : '',
+          fakeLabel
+        ].filter(Boolean).join('<br>')
+      || '<span style="color:var(--text-muted);font-size:.72rem">—</span>';
     return '<tr>'
       +'<td>'+( i+1)+'</td>'
       +'<td style="font-weight:600;white-space:nowrap">'+r.name+'</td>'
