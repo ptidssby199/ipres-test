@@ -473,7 +473,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 #session-check.show{display:flex;}
 #session-check p{color:rgba(255,255,255,.8);font-size:.9rem;font-family:'Plus Jakarta Sans',sans-serif;}
 #session-check .brand{font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:#fff;letter-spacing:-1px;}
-#session-check .brand span{color:#960b24;}
+#session-check .brand span{color:#f97316;}
 ::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
 .tab-content{display:none;}.tab-content.active{display:block;}
 .empty-state{text-align:center;padding:40px 20px;color:var(--text-muted);}
@@ -629,10 +629,21 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       <div class="laporan-header"><h2><i class="fas fa-chart-bar" style="margin-right:8px"></i>Laporan Rekap Absensi</h2><p>Kelola dan ekspor data kehadiran karyawan</p></div>
       <div class="laporan-filter">
         <div class="laporan-filter-row">
-          <div><div style="font-size:.75rem;font-weight:600;color:var(--text-muted);margin-bottom:5px">Bulan</div>
-            <select id="lap-bulan"><option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option><option value="7">Juli</option><option value="8">Agustus</option><option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option></select>
+          <div>
+            <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);margin-bottom:5px">Dari Tanggal</div>
+            <input type="date" id="lap-dari" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Plus Jakarta Sans',sans-serif;font-size:.85rem;outline:none;">
           </div>
-          <div><div style="font-size:.75rem;font-weight:600;color:var(--text-muted);margin-bottom:5px">Tahun</div><input type="number" id="lap-tahun" value="2026" min="2020" max="2099" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Plus Jakarta Sans',sans-serif;font-size:.85rem;outline:none;"></div>
+          <div>
+            <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);margin-bottom:5px">Sampai Tanggal</div>
+            <input type="date" id="lap-sampai" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Plus Jakarta Sans',sans-serif;font-size:.85rem;outline:none;">
+          </div>
+        </div>
+        <!-- Shortcut periode -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <button onclick="setPeriodeLaporan('today')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:.72rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif">Hari Ini</button>
+          <button onclick="setPeriodeLaporan('week')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:.72rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif">Minggu Ini</button>
+          <button onclick="setPeriodeLaporan('month')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:.72rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif">Bulan Ini</button>
+          <button onclick="setPeriodeLaporan('lastmonth')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:.72rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif">Bulan Lalu</button>
         </div>
         <input class="lap-search" type="text" id="lap-nama-filter" placeholder="Cari nama karyawan..." oninput="filterLaporanTable()">
         <button class="btn-laporan-load" onclick="loadLaporan()"><i class="fas fa-search"></i> Tampilkan Laporan</button>
@@ -654,7 +665,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
           <tbody id="rekap-tbody"></tbody>
         </table>
       </div>
-      <div id="laporan-empty" class="empty-state"><i class="fas fa-chart-bar"></i><p>Pilih bulan &amp; tahun lalu klik Tampilkan</p></div>
+      <div id="laporan-empty" class="empty-state"><i class="fas fa-chart-bar"></i><p>Pilih periode tanggal lalu klik Tampilkan</p></div>
     </div>
 
     <!-- KELOLA USER (Admin only) -->
@@ -1305,7 +1316,8 @@ window.addEventListener('load',()=>{
     }
   }
   startClock();
-  document.getElementById('lap-bulan').value=new Date().getMonth()+1;
+  // Set default periode laporan = bulan ini
+  setPeriodeLaporan('month');
   if(fc){
     firebaseConfig=JSON.parse(fc);
     // Tampilkan session-check saat Firebase sedang memverifikasi
@@ -3160,17 +3172,40 @@ async function approveIzin(docId, action){
 }
 
 
-// LAPORAN
-// laporanJadwalMap = {uid: {date: {shiftId, masuk, pulang}}}
-// let laporanJadwalMap = {};
+// Helper shortcut periode
+function setPeriodeLaporan(mode){
+  const now = new Date();
+  let dari, sampai;
+  if(mode==='today'){
+    dari = sampai = getLocalDateStr(now);
+  } else if(mode==='week'){
+    const day = now.getDay(); // 0=minggu
+    const diffMon = (day===0?-6:1-day);
+    const mon = new Date(now); mon.setDate(now.getDate()+diffMon);
+    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+    dari = getLocalDateStr(mon); sampai = getLocalDateStr(sun);
+  } else if(mode==='month'){
+    const y=now.getFullYear(), m=String(now.getMonth()+1).padStart(2,'0');
+    dari=`${y}-${m}-01`; sampai=`${y}-${m}-31`;
+  } else if(mode==='lastmonth'){
+    const d = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0');
+    dari=`${y}-${m}-01`; sampai=`${y}-${m}-31`;
+  }
+  document.getElementById('lap-dari').value = dari;
+  document.getElementById('lap-sampai').value = sampai;
+}
 
+// LAPORAN
 async function loadLaporan(silent=false){
   if(!hasRole('manager')){showToast('Akses ditolak','error');return;}
   if(!firebaseDb){showToast('Firebase belum terhubung','error');return;}
-  const bulan=parseInt(document.getElementById('lap-bulan').value),tahun=parseInt(document.getElementById('lap-tahun').value);
-  const start=`${tahun}-${String(bulan).padStart(2,'0')}-01`;
-  const end=`${tahun}-${String(bulan).padStart(2,'0')}-31`;
-  const bulanKey=`${tahun}-${String(bulan).padStart(2,'0')}`;
+  const start = document.getElementById('lap-dari').value;
+  const end   = document.getElementById('lap-sampai').value;
+  if(!start||!end){showToast('Pilih tanggal dari dan sampai','warning');return;}
+  if(start>end){showToast('Tanggal dari tidak boleh lebih besar dari sampai','warning');return;}
+  // bulanKey hanya dipakai untuk load jadwal — pakai bulan dari tanggal start
+  const bulanKey = start.slice(0,7); // "YYYY-MM"
   const btn=document.querySelector('.btn-laporan-load');
   if(!silent)btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Memuat...';
   try{
@@ -3451,8 +3486,10 @@ async function simpanEditAbsen(){
 }
 function exportExcel(){
   if(!laporanData.length){showToast('Muat laporan dulu sebelum export','warning');return;}
-  const bulan=document.getElementById('lap-bulan'),tahun=document.getElementById('lap-tahun').value;
-  const namaBulan=bulan.options[bulan.selectedIndex].text;
+  const dari=document.getElementById('lap-dari').value||'';
+  const sampai=document.getElementById('lap-sampai').value||'';
+  const periodeLabel = dari===sampai ? dari : `${dari} sd ${sampai}`;
+  const namaBulan = periodeLabel;
   const grouped={};
   laporanData.forEach(r=>{const key=(r.uid||'x')+'|'+(r.date||'');if(!grouped[key])grouped[key]={uid:r.uid,nama:r.userName||'—',tanggal:r.date,masuk:'—',pulang:'—',lat:r.lat,lng:r.lng,photoMasuk:'',photoMasukIsBase64:false,photoPulang:'',photoPulangIsBase64:false};if(r.type==='masuk'){grouped[key].masuk=r.time;grouped[key].lat=r.lat;grouped[key].lng=r.lng;const foto=r.photoURL||r.photoBase64||'';if(foto){grouped[key].photoMasuk=foto;grouped[key].photoMasukIsBase64=!r.photoURL&&!!r.photoBase64;}}if(r.type==='pulang'){grouped[key].pulang=r.time;const fotoP=r.photoURL||r.photoBase64||'';if(fotoP){grouped[key].photoPulang=fotoP;grouped[key].photoPulangIsBase64=!r.photoURL&&!!r.photoBase64;}}grouped[key].uid=r.uid;});
   const rows=Object.values(grouped).sort((a,b)=>a.tanggal>b.tanggal?1:-1);
@@ -3515,7 +3552,7 @@ function exportExcel(){
 <body>
 <table>
   <tr><td colspan="${colCount}" style="font-size:16px;font-weight:700;color:#ffffff;background:#7c3aed;text-align:center;padding:10px;border:1px solid #6d28d9">LAPORAN REKAP ABSENSI PT. INDONESIA DWI SEMBILAN</td></tr>
-  <tr><td colspan="${colCount}" style="font-size:11px;font-weight:600;text-align:center;color:#475569;padding:4px;border:1px solid #d1d5db">Periode: ${esc(namaBulan)} ${esc(tahun)} &nbsp;•&nbsp; Diekspor: ${esc(new Date().toLocaleString('id-ID'))}</td></tr>
+  <tr><td colspan="${colCount}" style="font-size:11px;font-weight:600;text-align:center;color:#475569;padding:4px;border:1px solid #d1d5db">Periode: ${esc(periodeLabel)} &nbsp;•&nbsp; Diekspor: ${esc(new Date().toLocaleString('id-ID'))}</td></tr>
   <tr><td colspan="${colCount}" style="padding:2px;border:none"></td></tr>
   <tr>${hdr.map(h=>`<th style="font-weight:700;color:#ffffff;background:#7c3aed;border:1px solid #6d28d9;text-align:center">${esc(h)}</th>`).join('')}</tr>
   ${bodyRows}
@@ -3526,21 +3563,23 @@ function exportExcel(){
   ${summaryRow('Terlambat', telatCountExp)}
   ${summaryRow('Hadir Lengkap', hadirLengkap)}
   ${summaryRow('Tidak Hadir', tidakHadir)}
-  ${summaryRow('Periode', namaBulan+' '+tahun)}
+  ${summaryRow('Periode', periodeLabel)}
 </table>
 </body></html>`;
 
   const blob=new Blob(['\ufeff'+html],{type:'application/vnd.ms-excel;charset=utf-8'});
   const url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download='Rekap_Absensi_'+namaBulan+'_'+tahun+'.xls';
+  a.href=url;a.download='Rekap_Absensi_'+dari+'_sd_'+sampai+'.xls';
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
   showToast('Export berhasil! Buka file .xls dengan Excel','success');
 }
 
 function exportHtmlFoto(){
   if(!laporanData.length){showToast('Muat laporan dulu sebelum export','warning');return;}
-  const bulan=document.getElementById('lap-bulan'),tahun=document.getElementById('lap-tahun').value;
-  const namaBulan=bulan.options[bulan.selectedIndex].text;
+  const dari=document.getElementById('lap-dari').value||'';
+  const sampai=document.getElementById('lap-sampai').value||'';
+  const namaBulan = dari===sampai ? dari : `${dari} sd ${sampai}`;
+  const tahun = dari.slice(0,4)||new Date().getFullYear();
   const M=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
   // Group data
   const grouped={};
@@ -3640,7 +3679,7 @@ function exportHtmlFoto(){
 </body></html>`;
   const blob=new Blob([html],{type:'text/html;charset=utf-8'});
   const url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download='Rekap_Foto_'+namaBulan+'_'+tahun+'.html';
+  a.href=url;a.download='Rekap_Foto_'+dari+'_sd_'+sampai+'.html';
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
   showToast('Export HTML + Foto berhasil! Buka file .html di browser','success');
 }
