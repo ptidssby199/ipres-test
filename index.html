@@ -1736,10 +1736,7 @@ async function doFingerprintVerif(){
       verifMethod='fingerprint';verifDone=true;
       showVerifStatus('success','✅ Fingerprint terverifikasi! Anda bisa langsung submit absen.');
       btn.innerHTML='<i class="fas fa-check"></i> Terverifikasi';
-      // Fingerprint sudah cukup — selfie TIDAK ditawarkan lagi (tidak diperlukan)
-      const btnSubmit=document.getElementById('btn-submit-absen');
-      btnSubmit.disabled=false;btnSubmit.style.opacity='1';
-      btnSubmit.style.background='var(--green)';
+      enableSubmitAbsen('var(--green)');
     }
   }catch(err){
     btn.disabled=false;btn.innerHTML='<i class="fas fa-fingerprint"></i> Verifikasi dengan Fingerprint';
@@ -1772,8 +1769,7 @@ async function doFingerprintVerifGet(){
       verifMethod='fingerprint';verifDone=true;
       showVerifStatus('success','✅ Fingerprint terverifikasi!');
       btn.innerHTML='<i class="fas fa-check"></i> Terverifikasi';
-      const btnSubmit=document.getElementById('btn-submit-absen');
-      btnSubmit.disabled=false;btnSubmit.style.opacity='1';btnSubmit.style.background='var(--green)';
+      enableSubmitAbsen('var(--green)');
     }
   }catch(e){
     showVerifStatus('warning','⚠️ Fingerprint tidak berhasil. Gunakan Selfie.');
@@ -2298,6 +2294,15 @@ async function getFaceDescriptor(imgEl){
   return result ? result.descriptor : null;
 }
 
+function enableSubmitAbsen(color='var(--green)'){
+  const btn = document.getElementById('btn-submit-absen');
+  btn.disabled = false;
+  btn.style.opacity = '1';
+  btn.style.background = color;
+  // Auto-scroll ke tombol submit agar tidak perlu geser manual
+  setTimeout(()=>{ btn.scrollIntoView({behavior:'smooth', block:'center'}); }, 200);
+}
+
 async function runFaceVerification(canvasEl){
   const fvResult = document.getElementById('face-verif-result');
   const fvMsg    = document.getElementById('face-verif-msg');
@@ -2318,7 +2323,6 @@ async function runFaceVerification(canvasEl){
     // 1. Pastikan model termuat
     const ready = await loadFaceApiModels();
     if(!ready){
-      // Model gagal muat — lewati verifikasi wajah (jangan blokir absen)
       _faceVerifSkip('Model AI tidak tersedia. Selfie disimpan tanpa verifikasi wajah.');
       return;
     }
@@ -2358,31 +2362,22 @@ async function runFaceVerification(canvasEl){
     fvPct.textContent = pct;
 
     if(distance <= FACE_MATCH_THRESHOLD){
-      // COCOK
       fvBar.style.background = 'var(--green)';
       fvMsg.className = 'face-verify-status fvs-success';
       fvMsg.innerHTML = `<i class="fas fa-check-circle"></i> Wajah terverifikasi! Kecocokan ${similarity}%`;
       showVerifStatus('success', `✅ Wajah terverifikasi (${similarity}% cocok)`);
       verifDone = true;
-      btnSubmit.disabled = false;
-      btnSubmit.style.opacity = '1';
-      btnSubmit.style.background = 'var(--green)';
+      enableSubmitAbsen('var(--green)');
     } else if(distance <= FACE_MATCH_THRESHOLD + 0.15){
-      // RAGU-RAGU — biarkan absen tapi beri peringatan
       fvBar.style.background = 'var(--yellow)';
       fvMsg.className = 'face-verify-status fvs-warn';
       fvMsg.innerHTML = `<i class="fas fa-exclamation-circle"></i> Wajah kurang cocok (${similarity}%). Foto dicatat untuk review admin.`;
       showVerifStatus('warning', `⚠️ Kecocokan wajah rendah (${similarity}%). Absen tercatat dengan tanda peringatan.`);
-      verifDone = true; // tetap bisa submit, tapi ditandai
-      capturedPhoto = capturedPhoto; // simpan foto
-      btnSubmit.disabled = false;
-      btnSubmit.style.opacity = '1';
-      btnSubmit.style.background = 'var(--yellow)';
-      // Tandai untuk review
+      verifDone = true;
       window._faceWarnFlag = true;
       window._faceWarnSimilarity = similarity;
+      enableSubmitAbsen('var(--yellow)');
     } else {
-      // TIDAK COCOK — blokir
       fvBar.style.background = 'var(--red)';
       fvMsg.className = 'face-verify-status fvs-fail';
       fvMsg.innerHTML = `<i class="fas fa-times-circle"></i> Wajah TIDAK cocok (${similarity}%). Absen ditolak. Pastikan Anda yang melakukan absen sendiri.`;
@@ -2390,7 +2385,6 @@ async function runFaceVerification(canvasEl){
       verifDone = false;
       btnSubmit.disabled = true;
       btnSubmit.style.opacity = '.5';
-      // Log pelanggaran ke Firestore
       if(firebaseDb && currentUser){
         firebaseDb.collection('face_violations').add({
           uid: currentUser.uid,
@@ -2410,16 +2404,12 @@ async function runFaceVerification(canvasEl){
 function _faceVerifSkip(msg){
   const fvResult = document.getElementById('face-verif-result');
   const fvMsg    = document.getElementById('face-verif-msg');
-  const btnSubmit= document.getElementById('btn-submit-absen');
   fvResult.style.display = 'block';
   fvMsg.className = 'face-verify-status fvs-noref';
   fvMsg.innerHTML = '<i class="fas fa-circle-info"></i> ' + msg;
   showVerifStatus('warning', '⚠️ ' + msg);
-  // Izinkan absen tetap bisa dilakukan (foto tetap tersimpan)
   verifDone = true;
-  btnSubmit.disabled = false;
-  btnSubmit.style.opacity = '1';
-  btnSubmit.style.background = 'var(--yellow)';
+  enableSubmitAbsen('var(--yellow)');
 }
 
 // ============================================================
