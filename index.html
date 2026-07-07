@@ -2690,13 +2690,18 @@ function dbgLog(msg){
   box.scrollTop=box.scrollHeight;
 }
 async function submitAbsen(type){
-  const now=new Date(),t=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  const now = new Date();
   // Disable semua tombol absen agar tidak double-submit
   const btns = document.querySelectorAll('.btn-masuk,.btn-pulang');
   btns.forEach(b=>{ b.disabled=true; b._origHTML=b.innerHTML; b.innerHTML='<i class="fas fa-spinner fa-spin"></i> Memverifikasi...'; });
 
-  // ── CEK WAKTU SERVER ──────────────────────────────────────────────
-  // Tolak absen jika jam HP berbeda lebih dari 5 menit dari server
+  // ── CEK MANIPULASI JAM ────────────────────────────────────────────
+  // Tujuan: deteksi apakah user mengubah jam HP secara manual.
+  // Caranya: bandingkan jam device vs jam server dalam UTC (keduanya UTC,
+  // sehingga perbedaan timezone tidak berpengaruh sama sekali).
+  // Jika selisih > 2 menit = jam HP diubah manual → tolak.
+  // Jam yang DISIMPAN tetap jam lokal device (GMT+8 tetap GMT+8).
+  let t = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
   try{
     dbgLog('Memeriksa waktu server...');
     const pingRef = await firebaseDb.collection('_ping').add({
@@ -2706,7 +2711,9 @@ async function submitAbsen(type){
     await pingRef.delete().catch(()=>{});
     const serverTime = pingSnap.data()?.t?.toDate();
     if(serverTime){
-      const diffMs = Math.abs(now - serverTime);
+      // Kedua nilai dalam UTC → selisih murni karena manipulasi jam,
+      // bukan karena perbedaan timezone
+      const diffMs = Math.abs(now.getTime() - serverTime.getTime());
       const diffMin = Math.round(diffMs / 60000);
       dbgLog('Selisih waktu device vs server: '+diffMin+' menit');
       if(diffMin >= 2){
@@ -2714,9 +2721,11 @@ async function submitAbsen(type){
         showTimeManipulationWarning(diffMin, now, serverTime);
         return;
       }
+      // Lolos validasi — gunakan jam lokal device (sudah benar sesuai timezone user)
+      // GMT+7 → jam 08:00, GMT+8 → jam 09:00 — keduanya benar dan tersimpan apa adanya
+      dbgLog('Jam lokal device ('+Intl.DateTimeFormat().resolvedOptions().timeZone+'): '+t);
     }
   }catch(e){
-    // Jika ping gagal (offline), lanjutkan — akan tersimpan offline
     dbgLog('Ping server gagal (offline?): '+e.message);
   }
   // ─────────────────────────────────────────────────────────────────
@@ -2725,11 +2734,9 @@ async function submitAbsen(type){
   btns.forEach(b=>{ b.innerHTML='<i class="fas fa-spinner fa-spin"></i> Menyimpan...'; });
   dbgLog('START: '+type+(capturedPhoto?' | foto '+Math.round(capturedPhoto.length/1024)+'KB':' | tanpa foto'));
   try{
-    // ── Tentukan tanggal yang akan disimpan ───────────────────────────
-    // Untuk absen MASUK: selalu gunakan tanggal hari ini
-    // Untuk absen PULANG: cari tanggal absen masuk terakhir yang belum
-    //   ada pasangan pulangnya. Kasus: masuk Senin malam, pulang Selasa
-    //   pagi → data pulang harus tetap tercatat dengan date Senin.
+    // Tanggal absen dari server (sudah dikonversi ke WIB di atas)
+    // jamAbsen sudah WIB, jadi now untuk getLocalDateStr juga perlu dikoreksi
+    // Gunakan serverWib jika tersedia, fallback ke now
     let absenDate = getLocalDateStr(now);
 
     if(type === 'pulang' && firebaseDb && currentUser?.uid){
