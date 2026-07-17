@@ -473,7 +473,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 #session-check.show{display:flex;}
 #session-check p{color:rgba(255,255,255,.8);font-size:.9rem;font-family:'Plus Jakarta Sans',sans-serif;}
 #session-check .brand{font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:#fff;letter-spacing:-1px;}
-#session-check .brand span{color:#f97316;}
+#session-check .brand span{color:#960b24;}
 ::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
 .tab-content{display:none;}.tab-content.active{display:block;}
 .empty-state{text-align:center;padding:40px 20px;color:var(--text-muted);}
@@ -1042,6 +1042,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       <div id="absen-map"></div>
       <div class="map-info-row loading" id="map-status-row"><i class="fas fa-spinner fa-spin"></i><div><div style="font-weight:700">Mengambil lokasi GPS...</div></div></div>
       <div class="map-radius-note" id="map-radius-note"></div>
+      <div id="field-checkout-box" style="display:none;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px;margin-bottom:14px">
+        <div style="font-size:.8rem;color:#9a3412;margin-bottom:8px"><i class="fas fa-info-circle"></i> Anda di luar radius kantor. Jika sedang kunjungan/dinas ke lapangan dan tidak bisa balik ke kantor untuk absen pulang, gunakan opsi ini.</div>
+        <button type="button" id="btn-field-checkout" class="btn-next-step" style="background:#ea580c" onclick="useFieldCheckout()"><i class="fas fa-map-marked-alt"></i> Checkout Dinas Luar (Absen Pulang dari Lapangan)</button>
+      </div>
       <div style="padding:0 0 16px"><button class="btn-next-step" id="btn-step1-next" onclick="goToStep(2)" disabled><i class="fas fa-arrow-right"></i> Lanjut ke Pilih Absen</button><button class="btn-cancel-modal" onclick="closeAbsenModal()">Batal</button></div>
     </div>
     <div class="absen-step-content" id="step-2">
@@ -1501,7 +1505,7 @@ async function loadMyAbsensiToday(){
     const c=document.getElementById('activity-list');
     if(!todayDocs.length){c.innerHTML='<div class="empty-state"><i class="fas fa-inbox"></i><p>Belum ada aktivitas hari ini</p></div>';return;}
     const actDocs=todayDocs.sort((a,b)=>(a.time||'')>(b.time||'')?1:-1);
-    c.innerHTML=actDocs.map(r=>{return`<div class="activity-item"><div class="activity-dot" style="background:${r.type==='masuk'?'#16a34a':'#f97316'}"></div><div class="activity-info"><div class="a-title">${r.type==='masuk'?'Absen Masuk':'Absen Pulang'}</div><div class="a-sub"><i class="fas fa-clock" style="font-size:.7rem"></i> ${r.time}</div></div><div class="activity-time">${r.lat?(r.lat.toFixed(4)+','+r.lng.toFixed(4)):'—'}</div></div>`;}).join('');
+    c.innerHTML=actDocs.map(r=>{const dl=r.checkoutMode==='lapangan'?' <span style="background:#ffedd5;color:#9a3412;font-size:.65rem;font-weight:700;padding:1px 6px;border-radius:99px;margin-left:4px">Dinas Luar</span>':'';return`<div class="activity-item"><div class="activity-dot" style="background:${r.type==='masuk'?'#16a34a':'#f97316'}"></div><div class="activity-info"><div class="a-title">${r.type==='masuk'?'Absen Masuk':'Absen Pulang'}${dl}</div><div class="a-sub"><i class="fas fa-clock" style="font-size:.7rem"></i> ${r.time}</div></div><div class="activity-time">${r.lat?(r.lat.toFixed(4)+','+r.lng.toFixed(4)):'—'}</div></div>`;}).join('');
     actDocs.forEach(r=>{if(r.type==='masuk'){document.getElementById('stat-masuk').textContent=r.time;document.getElementById('today-status').textContent='Sudah Absen Masuk ✓';}if(r.type==='pulang'){document.getElementById('stat-pulang').textContent=r.time;document.getElementById('today-status').textContent='Sudah Absen Pulang ✓';}});
     // Hitung hadir bulan ini — hanya hadir murni (bukan izinAutoFill)
     const m=new Date().getMonth()+1,y=new Date().getFullYear();
@@ -1606,7 +1610,7 @@ function closeAbsenModal(){
   document.getElementById('modal-absen').classList.remove('open');
   if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null;}
   resetCameraUI();capturedPhoto=null;currentLocation=null;locationOk=false;selectedAbsenType=null;verifMethod=null;verifDone=false;
-  selectedCabangData=null;
+  selectedCabangData=null;fieldCheckoutMode=false;
   window._faceWarnFlag=false;window._faceWarnSimilarity=null;
   const fvr=document.getElementById('face-verif-result');if(fvr)fvr.style.display='none';
 }
@@ -1623,7 +1627,22 @@ function goToStep(n){
   [0,1,2].forEach(i=>{ const el=document.getElementById('step-line-'+i); if(el) el.classList.toggle('done',i<n); });
   if(n===0){ loadCabangListAbsen(); }
   if(n===1){ applySelectedCabang(); initAbsenMap(); }
+  if(n===2){ applyFieldCheckoutStepLock(); }
   if(n===3){ buildConfirmSummary(); resetVerifState(); }
+}
+
+function applyFieldCheckoutStepLock(){
+  const btnM=document.getElementById('btn-pilih-masuk');
+  if(fieldCheckoutMode){
+    btnM.disabled=true;
+    btnM.style.opacity='.4';
+    btnM.style.cursor='not-allowed';
+    pilihJenisAbsen('pulang');
+  } else {
+    btnM.disabled=false;
+    btnM.style.opacity='';
+    btnM.style.cursor='';
+  }
 }
 
 async function pilihJenisAbsen(type){
@@ -2009,7 +2028,22 @@ function analyzeLocation(samples){
     else setMapStatus('luar','✗ Di luar zona absensi','Jarak: '+Math.round(dist)+' m (radius: 20 m)');
     document.getElementById('map-radius-note').textContent='Zona: '+fallback.nama+' — Radius 20 m';
   }
+  fieldCheckoutMode=false;
+  const fcBox=document.getElementById('field-checkout-box');
+  if(fcBox) fcBox.style.display=locationOk?'none':'block';
   document.getElementById('btn-step1-next').disabled=!locationOk;
+}
+
+// ── CHECKOUT DINAS LUAR (absen pulang dari luar radius kantor) ──────
+// Untuk kasus karyawan kunjungan/dinas ke lapangan dan jam kerja habis
+// sebelum sempat balik ke kantor untuk absen pulang.
+let fieldCheckoutMode=false;
+function useFieldCheckout(){
+  fieldCheckoutMode=true;
+  locationOk=true; // bypass radius kantor, GPS asli tetap direkam apa adanya
+  setMapStatus('dalam','📍 Mode Dinas Luar aktif','Absen pulang akan tercatat dari lokasi lapangan saat ini');
+  document.getElementById('btn-step1-next').disabled=false;
+  showToast('Mode Checkout Dinas Luar aktif — lanjut ke absen pulang','info');
 }
 
 function showFakeGPSWarning(warnings, score, lat, lng, acc){
@@ -2660,7 +2694,10 @@ function buildConfirmSummary(){
   document.getElementById('confirm-role').textContent=currentUser?.role||'—';
   document.getElementById('confirm-time').textContent='⏰ '+h+' — '+D[now.getDay()]+', '+now.getDate()+' '+M[now.getMonth()]+' '+now.getFullYear();
   if(currentLocation)document.getElementById('confirm-loc').textContent=currentLocation.lat.toFixed(5)+', '+currentLocation.lng.toFixed(5)+' (±'+Math.round(currentLocation.acc||0)+'m)';
-  const _ac=selectedCabangData||officeConfig; if(_ac) document.getElementById('confirm-radius-txt').textContent='Dalam zona '+(_ac.nama||'kantor')+' (radius '+(_ac.radius||20)+'m)';
+  const _ac=selectedCabangData||officeConfig;
+  if(fieldCheckoutMode){
+    document.getElementById('confirm-radius-row').innerHTML='<i class="fas fa-map-marked-alt" style="color:#ea580c;width:14px"></i><span style="color:#ea580c;font-weight:700">Dinas Luar — checkout dari lapangan (di luar radius kantor)</span>';
+  } else if(_ac) document.getElementById('confirm-radius-txt').textContent='Dalam zona '+(_ac.nama||'kantor')+' (radius '+(_ac.radius||20)+'m)';
   else document.getElementById('confirm-radius-row').innerHTML='<i class="fas fa-info-circle" style="color:var(--yellow);width:14px"></i><span style="color:var(--yellow)">Radius belum dikonfigurasi</span>';
   // Tampilkan jenis absen yang dipilih
   const jenisEl=document.getElementById('confirm-jenis-txt');
@@ -2690,18 +2727,13 @@ function dbgLog(msg){
   box.scrollTop=box.scrollHeight;
 }
 async function submitAbsen(type){
-  const now = new Date();
+  const now=new Date(),t=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   // Disable semua tombol absen agar tidak double-submit
   const btns = document.querySelectorAll('.btn-masuk,.btn-pulang');
   btns.forEach(b=>{ b.disabled=true; b._origHTML=b.innerHTML; b.innerHTML='<i class="fas fa-spinner fa-spin"></i> Memverifikasi...'; });
 
-  // ── CEK MANIPULASI JAM ────────────────────────────────────────────
-  // Tujuan: deteksi apakah user mengubah jam HP secara manual.
-  // Caranya: bandingkan jam device vs jam server dalam UTC (keduanya UTC,
-  // sehingga perbedaan timezone tidak berpengaruh sama sekali).
-  // Jika selisih > 2 menit = jam HP diubah manual → tolak.
-  // Jam yang DISIMPAN tetap jam lokal device (GMT+8 tetap GMT+8).
-  let t = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  // ── CEK WAKTU SERVER ──────────────────────────────────────────────
+  // Tolak absen jika jam HP berbeda lebih dari 5 menit dari server
   try{
     dbgLog('Memeriksa waktu server...');
     const pingRef = await firebaseDb.collection('_ping').add({
@@ -2711,9 +2743,7 @@ async function submitAbsen(type){
     await pingRef.delete().catch(()=>{});
     const serverTime = pingSnap.data()?.t?.toDate();
     if(serverTime){
-      // Kedua nilai dalam UTC → selisih murni karena manipulasi jam,
-      // bukan karena perbedaan timezone
-      const diffMs = Math.abs(now.getTime() - serverTime.getTime());
+      const diffMs = Math.abs(now - serverTime);
       const diffMin = Math.round(diffMs / 60000);
       dbgLog('Selisih waktu device vs server: '+diffMin+' menit');
       if(diffMin >= 2){
@@ -2721,11 +2751,9 @@ async function submitAbsen(type){
         showTimeManipulationWarning(diffMin, now, serverTime);
         return;
       }
-      // Lolos validasi — gunakan jam lokal device (sudah benar sesuai timezone user)
-      // GMT+7 → jam 08:00, GMT+8 → jam 09:00 — keduanya benar dan tersimpan apa adanya
-      dbgLog('Jam lokal device ('+Intl.DateTimeFormat().resolvedOptions().timeZone+'): '+t);
     }
   }catch(e){
+    // Jika ping gagal (offline), lanjutkan — akan tersimpan offline
     dbgLog('Ping server gagal (offline?): '+e.message);
   }
   // ─────────────────────────────────────────────────────────────────
@@ -2734,9 +2762,11 @@ async function submitAbsen(type){
   btns.forEach(b=>{ b.innerHTML='<i class="fas fa-spinner fa-spin"></i> Menyimpan...'; });
   dbgLog('START: '+type+(capturedPhoto?' | foto '+Math.round(capturedPhoto.length/1024)+'KB':' | tanpa foto'));
   try{
-    // Tanggal absen dari server (sudah dikonversi ke WIB di atas)
-    // jamAbsen sudah WIB, jadi now untuk getLocalDateStr juga perlu dikoreksi
-    // Gunakan serverWib jika tersedia, fallback ke now
+    // ── Tentukan tanggal yang akan disimpan ───────────────────────────
+    // Untuk absen MASUK: selalu gunakan tanggal hari ini
+    // Untuk absen PULANG: cari tanggal absen masuk terakhir yang belum
+    //   ada pasangan pulangnya. Kasus: masuk Senin malam, pulang Selasa
+    //   pagi → data pulang harus tetap tercatat dengan date Senin.
     let absenDate = getLocalDateStr(now);
 
     if(type === 'pulang' && firebaseDb && currentUser?.uid){
@@ -2788,9 +2818,13 @@ async function submitAbsen(type){
       uid:currentUser?.uid, userName:currentUser?.name, userRole:currentUser?.userRole,
       checkInMachine: type==='masuk' ? ((selectedCabangData||officeConfig)?.checkInMachine || CHECKIN_MACHINE_CODE) : ((selectedCabangData||officeConfig)?.checkOutMachine || CHECKOUT_MACHINE_CODE),
       checkOutMachine: type==='pulang' ? ((selectedCabangData||officeConfig)?.checkOutMachine || CHECKOUT_MACHINE_CODE || null) : null,
-      absenceType: (selectedCabangData||officeConfig)?.absenceType || ABSENCE_TYPE_CODE,
+      // Checkout Dinas Luar: kode absenceType TETAP AT-SB1-0004 (default), hanya diberi
+      // label & flag tambahan agar bisa dibedakan di histori/rekap, tanpa mengubah kode sync.
+      absenceType: fieldCheckoutMode ? ABSENCE_TYPE_CODE : ((selectedCabangData||officeConfig)?.absenceType || ABSENCE_TYPE_CODE),
+      absenceLabel: fieldCheckoutMode ? 'Dinas Luar' : null,
+      checkoutMode: fieldCheckoutMode ? 'lapangan' : null,
       cabangId: selectedCabangData?.id || null,
-      cabangNama: selectedCabangData?.nama || (officeConfig?.nama || 'Kantor Pusat'),
+      cabangNama: fieldCheckoutMode ? 'Lapangan (Dinas Luar)' : (selectedCabangData?.nama || (officeConfig?.nama || 'Kantor Pusat')),
       faceWarn: window._faceWarnFlag || false,
       faceWarnSimilarity: window._faceWarnFlag ? (window._faceWarnSimilarity||null) : null,
     });
@@ -2841,7 +2875,8 @@ function renderHistory(data,filter){
   c.innerHTML=filtered.map(h=>{
     const d=new Date(h.date||Date.now()),tgl=isNaN(d)?h.date:d.getDate()+' '+M[d.getMonth()];
     const day=isNaN(d)?'—':d.getDate(),mon=isNaN(d)?'—':M[d.getMonth()];
-    return`<div class="history-card"><div class="history-date-box"><div class="hd-day">${day}</div><div class="hd-mon">${mon}</div></div><div class="history-info"><div class="hi-type"><i class="fas ${h.type==='masuk'?'fa-sign-in-alt':'fa-sign-out-alt'}" style="color:${h.type==='masuk'?'var(--green)':'var(--accent)'};margin-right:5px"></i>${h.type==='masuk'?'Absen Masuk':'Absen Pulang'}</div><div class="hi-loc"><i class="fas fa-clock" style="font-size:.7rem"></i> ${h.time||'—'}</div><div class="hi-times"><span>${h.lat?'📍'+h.lat.toFixed(4)+','+h.lng.toFixed(4):'Lokasi tidak tersedia'}</span></div></div></div>`;
+    const dlBadge=h.checkoutMode==='lapangan'?' <span style="background:#ffedd5;color:#9a3412;font-size:.65rem;font-weight:700;padding:1px 6px;border-radius:99px;margin-left:4px">Dinas Luar</span>':'';
+    return`<div class="history-card"><div class="history-date-box"><div class="hd-day">${day}</div><div class="hd-mon">${mon}</div></div><div class="history-info"><div class="hi-type"><i class="fas ${h.type==='masuk'?'fa-sign-in-alt':'fa-sign-out-alt'}" style="color:${h.type==='masuk'?'var(--green)':'var(--accent)'};margin-right:5px"></i>${h.type==='masuk'?'Absen Masuk':'Absen Pulang'}${dlBadge}</div><div class="hi-loc"><i class="fas fa-clock" style="font-size:.7rem"></i> ${h.time||'—'}</div><div class="hi-times"><span>${h.lat?'📍'+h.lat.toFixed(4)+','+h.lng.toFixed(4):'Lokasi tidak tersedia'}</span></div></div></div>`;
   }).join('');
 }
 function filterHistory(el,filter){document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderHistory(historyData,filter);}
@@ -3291,6 +3326,7 @@ function renderLaporanTable(data){
     }
     if(r.type==='pulang'){
       grouped[key].pulang = r.time || '—';
+      grouped[key].checkoutMode = r.checkoutMode || null;
       grouped[key].photoPulang=r.photoURL||r.photoBase64||null;
       grouped[key].latPulang=r.lat||null;
       grouped[key].lngPulang=r.lng||null;
@@ -3342,7 +3378,7 @@ function renderLaporanTable(data){
     const batasMasuk = r.izinAutoFill ? '—' : (t ? t.batas : '—');
     // Jam masuk & pulang: izin = '—', normal = jam sebenarnya
     const masukDisplay = r.izinAutoFill ? '—' : (r.masuk || '—');
-    const pulangDisplay = r.izinAutoFill ? '—' : (r.pulang || '—');
+    const pulangDisplay = r.izinAutoFill ? '—' : (r.pulang || '—') + (!r.izinAutoFill && r.checkoutMode==='lapangan' ? ' <span style="background:#ffedd5;color:#9a3412;font-size:.6rem;font-weight:700;padding:1px 5px;border-radius:99px">Dinas Luar</span>' : '');
     // Tombol bukti foto & lokasi (izin tidak punya)
     const hasPhotoMasuk = !!r.photoMasuk;
     const hasPhotoPulang = !!r.photoPulang;
