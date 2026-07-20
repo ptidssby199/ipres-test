@@ -565,6 +565,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       </div>
       <div class="section-title">Aktivitas Terakhir</div>
       <div class="activity-list" id="activity-list"><div class="empty-state"><i class="fas fa-inbox"></i><p>Belum ada aktivitas hari ini</p></div></div>
+      <div class="section-title">Visit Hari Ini</div>
+      <div class="activity-list" id="visit-today-list"><div class="empty-state"><i class="fas fa-map-marked-alt"></i><p>Belum ada visit hari ini</p></div></div>
     </div>
 
     <!-- RIWAYAT -->
@@ -1474,7 +1476,7 @@ function finishLogin(isRestore=false){
   document.getElementById('page-login').style.display='none';
   document.getElementById('session-check').classList.remove('show');
   applyRoleUI();updateProfileUI();
-  loadMyAbsensiToday();loadMyAbsensiHistory();loadMyIzin();loadProfileStats();loadMyJadwalHariIni();
+  loadMyAbsensiToday();loadMyAbsensiHistory();loadMyIzin();loadProfileStats();loadMyJadwalHariIni();loadMyVisitToday();
   updatePendingBadge();
   document.getElementById('page-login').style.display='none';
   document.getElementById('page-app').style.display='block';
@@ -1490,6 +1492,7 @@ function finishLogin(isRestore=false){
       loadMyAbsensiToday();
       loadProfileStats();
       loadMyJadwalHariIni();
+      loadMyVisitToday();
       // Jika sedang di tab laporan, refresh laporan juga
       if(document.getElementById('tab-laporan').classList.contains('active')&&window._laporanLoaded){
         loadLaporan(true);
@@ -1570,6 +1573,30 @@ function switchTab(name){
 }
 
 // LOAD DATA
+function lihatVisitFotoToday(idx){
+  const r=window._visitTodayData?.[idx];
+  if(!r||!r.photoBase64) return;
+  const w=window.open('','_blank');
+  w.document.write('<title>Foto Visit</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="'+r.photoBase64+'" style="max-width:100%;max-height:100vh"></body>');
+}
+async function loadMyVisitToday(){
+  if(!firebaseDb||!currentUser)return;
+  const today=getLocalDateStr();
+  try{
+    // Hanya 1 where clause (uid==) → tidak butuh index, filter tanggal di JS
+    const snap=await firebaseDb.collection('visit').where('uid','==',currentUser.uid).get();
+    const todayDocs=snap.docs.map(d=>d.data()).filter(d=>d.date===today).sort((a,b)=>(a.time||'')>(b.time||'')?1:-1);
+    window._visitTodayData=todayDocs;
+    const c=document.getElementById('visit-today-list');
+    if(!c)return;
+    if(!todayDocs.length){c.innerHTML='<div class="empty-state"><i class="fas fa-map-marked-alt"></i><p>Belum ada visit hari ini</p></div>';return;}
+    c.innerHTML=todayDocs.map((r,i)=>{
+      const fotoBtn=r.photoBase64?`<button class="rekap-foto-btn" style="padding:3px 8px;font-size:.7rem" onclick="lihatVisitFotoToday(${i})"><i class="fas fa-camera"></i></button>`:'';
+      return `<div class="activity-item"><div class="activity-dot" style="background:#0891b2"></div><div class="activity-info"><div class="a-title">${r.keterangan||'Visit'}</div><div class="a-sub"><i class="fas fa-clock" style="font-size:.7rem"></i> ${r.time||'—'}</div></div><div class="activity-time" style="display:flex;align-items:center;gap:6px">${r.lat?(r.lat.toFixed(4)+','+r.lng.toFixed(4)):'—'}${fotoBtn}</div></div>`;
+    }).join('');
+  }catch(e){ /* diam saja jika gagal, tidak mengganggu tampilan utama */ }
+}
+
 async function loadMyAbsensiToday(){
   if(!firebaseDb||!currentUser)return;
   const today=getLocalDateStr();
@@ -3039,6 +3066,7 @@ async function submitVisit(){
     } else {
       showToast('Visit berhasil disimpan! Pukul '+t,'success');
     }
+    setTimeout(loadMyVisitToday,1200);
   }catch(err){
     showToast('Gagal menyimpan visit: '+(err.message||err),'error');
   }
