@@ -2986,7 +2986,7 @@ function getVisitLocation(){
 }
 function startCameraVisit(){
   if(!navigator.mediaDevices){showToast('Kamera tidak tersedia','error');return;}
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false})
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false})
     .then(s=>{
       visitStream=s;
       const v=document.getElementById('camera-video-visit');
