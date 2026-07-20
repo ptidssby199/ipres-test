@@ -557,6 +557,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       <div class="quick-actions" id="quick-actions-grid">
         <button class="quick-btn" onclick="openAbsenModal()"><div class="qb-icon" style="background:var(--green-light)"><i class="fas fa-fingerprint" style="color:var(--green)"></i></div><span>Absen</span></button>
         <button class="quick-btn" onclick="switchTab('izin')"><div class="qb-icon" style="background:var(--primary-light)"><i class="fas fa-file-alt" style="color:var(--primary)"></i></div><span>Ijin</span></button>
+        <button class="quick-btn" onclick="openVisitModal()"><div class="qb-icon" style="background:#ecfeff"><i class="fas fa-map-marked-alt" style="color:#0891b2"></i></div><span>Visit</span></button>
         <button class="quick-btn" onclick="switchTab('riwayat')"><div class="qb-icon" style="background:var(--yellow-light)"><i class="fas fa-history" style="color:var(--yellow)"></i></div><span>Riwayat</span></button>
         <button class="quick-btn" id="qb-jadwal" style="display:none" onclick="switchTab('jadwal')"><div class="qb-icon" style="background:#f0fdfa"><i class="fas fa-calendar-alt" style="color:#0d9488"></i></div><span>Jadwal</span></button>
         <button class="quick-btn" id="qb-laporan" style="display:none" onclick="switchTab('laporan')"><div class="qb-icon" style="background:#f5f3ff"><i class="fas fa-chart-bar" style="color:#7c3aed"></i></div><span>Laporan</span></button>
@@ -626,7 +627,12 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 
     <!-- LAPORAN -->
     <div class="tab-content" id="tab-laporan">
-      <div class="laporan-header"><h2><i class="fas fa-chart-bar" style="margin-right:8px"></i>Laporan Rekap Absensi</h2><p>Kelola dan ekspor data kehadiran karyawan</p></div>
+      <div class="laporan-header"><h2><i class="fas fa-chart-bar" style="margin-right:8px"></i>Laporan &amp; Rekap</h2><p>Kelola dan ekspor data kehadiran &amp; kunjungan karyawan</p></div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="filter-chip active" id="lap-chip-absensi" onclick="switchLaporanMode('absensi')" style="flex:1;text-align:center;padding:9px;border-radius:8px;border:1.5px solid var(--primary);background:var(--primary-light);color:var(--primary);font-weight:700;font-size:.82rem;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif"><i class="fas fa-fingerprint" style="margin-right:5px"></i>Rekap Absensi</button>
+        <button class="filter-chip" id="lap-chip-visit" onclick="switchLaporanMode('visit')" style="flex:1;text-align:center;padding:9px;border-radius:8px;border:1.5px solid var(--border);background:var(--card);color:var(--text-muted);font-weight:700;font-size:.82rem;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif"><i class="fas fa-map-marked-alt" style="margin-right:5px"></i>Rekap Visit</button>
+      </div>
+      <div id="laporan-absensi-section">
       <div class="laporan-filter">
         <div class="laporan-filter-row">
           <div>
@@ -666,6 +672,43 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         </table>
       </div>
       <div id="laporan-empty" class="empty-state"><i class="fas fa-chart-bar"></i><p>Pilih periode tanggal lalu klik Tampilkan</p></div>
+      </div>
+
+      <!-- SECTION: LAPORAN VISIT -->
+      <div id="laporan-visit-section" style="display:none">
+        <div class="laporan-filter">
+          <div class="laporan-filter-row">
+            <div>
+              <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);margin-bottom:5px">Dari Tanggal</div>
+              <input type="date" id="visit-lap-dari" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Plus Jakarta Sans',sans-serif;font-size:.85rem;outline:none;">
+            </div>
+            <div>
+              <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);margin-bottom:5px">Sampai Tanggal</div>
+              <input type="date" id="visit-lap-sampai" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Plus Jakarta Sans',sans-serif;font-size:.85rem;outline:none;">
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+            <button onclick="setPeriodeLaporanVisit('today')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:.72rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif">Hari Ini</button>
+            <button onclick="setPeriodeLaporanVisit('week')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:.72rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif">Minggu Ini</button>
+            <button onclick="setPeriodeLaporanVisit('month')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:.72rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif">Bulan Ini</button>
+            <button onclick="setPeriodeLaporanVisit('lastmonth')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:.72rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif">Bulan Lalu</button>
+          </div>
+          <input class="lap-search" type="text" id="visit-lap-nama-filter" placeholder="Cari nama karyawan..." oninput="filterVisitTable()">
+          <button class="btn-laporan-load" onclick="loadLaporanVisit()"><i class="fas fa-search"></i> Tampilkan Laporan Visit</button>
+          <button class="btn-export-excel" style="width:100%;background:#ecfeff;border-color:#0891b2;color:#0891b2" onclick="exportExcelVisit()"><i class="fas fa-file-excel"></i> Export Excel</button>
+        </div>
+        <div class="rekap-stats" id="visit-rekap-stats" style="display:none;grid-template-columns:repeat(2,1fr)">
+          <div class="rekap-stat-card"><div class="rs-val" id="rs-visit-pegawai" style="color:var(--primary)">0</div><div class="rs-label">Karyawan</div></div>
+          <div class="rekap-stat-card"><div class="rs-val" id="rs-visit-total" style="color:#0891b2">0</div><div class="rs-label">Total Visit</div></div>
+        </div>
+        <div class="rekap-table-wrap" id="visit-rekap-table-wrap" style="display:none">
+          <table class="rekap-table" id="visit-rekap-table">
+            <thead><tr><th>No</th><th>Nama</th><th>Tanggal</th><th>Jam</th><th>Keterangan</th><th>Lokasi</th><th>Foto</th></tr></thead>
+            <tbody id="visit-rekap-tbody"></tbody>
+          </table>
+        </div>
+        <div id="laporan-visit-empty" class="empty-state"><i class="fas fa-map-marked-alt"></i><p>Pilih periode tanggal lalu klik Tampilkan</p></div>
+      </div>
     </div>
 
     <!-- KELOLA USER (Admin only) -->
@@ -1115,6 +1158,38 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         <button class="btn-masuk" id="btn-submit-absen" onclick="doSubmitAbsen()" disabled style="width:100%;margin-bottom:8px;justify-content:center;opacity:.5"><i class="fas fa-paper-plane"></i> <span id="btn-submit-label">Submit Absen</span></button>
         <button class="btn-back-step" onclick="goToStep(2)"><i class="fas fa-arrow-left"></i> Kembali</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- VISIT MODAL -->
+<div class="modal-overlay" id="modal-visit">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="absen-step-title"><i class="fas fa-map-marked-alt"></i> Catat Kunjungan (Visit)</div>
+    <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:14px">Gunakan ini untuk mencatat kunjungan/dinas ke lapangan — terpisah dari absensi masuk/pulang.</p>
+
+    <div style="margin-bottom:14px">
+      <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);margin-bottom:5px">Tujuan / Keterangan Visit</div>
+      <textarea id="visit-keterangan" rows="2" placeholder="Contoh: Kunjungan ke toko/customer ABC" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Plus Jakarta Sans',sans-serif;font-size:.85rem;outline:none;resize:vertical"></textarea>
+    </div>
+
+    <div class="map-info-row loading" id="visit-loc-row"><i class="fas fa-spinner fa-spin"></i><div><div style="font-weight:700">Mengambil lokasi GPS...</div></div></div>
+
+    <div class="camera-area" id="camera-area-visit" style="margin-top:12px">
+      <div class="cam-placeholder" id="cam-placeholder-visit"><i class="fas fa-camera"></i><div style="font-size:.82rem;margin-top:6px">Tekan tombol untuk aktifkan kamera</div></div>
+      <video id="camera-video-visit" style="display:none" autoplay playsinline muted></video>
+      <canvas id="camera-canvas-visit" style="display:none"></canvas>
+      <div class="cam-photo-taken" id="cam-taken-badge-visit" style="display:none"><i class="fas fa-check"></i> Foto diambil</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button type="button" class="btn-next-step" style="flex:1;background:#0891b2" onclick="startCameraVisit()"><i class="fas fa-camera"></i> Aktifkan Kamera</button>
+      <button type="button" class="btn-next-step" style="flex:1" onclick="capturePhotoVisit()"><i class="fas fa-circle"></i> Ambil Foto</button>
+    </div>
+
+    <div style="padding:16px 0">
+      <button class="btn-masuk" id="btn-submit-visit" onclick="submitVisit()" style="width:100%;margin-bottom:8px;justify-content:center;background:#0891b2"><i class="fas fa-paper-plane"></i> Simpan Visit</button>
+      <button class="btn-cancel-modal" onclick="closeVisitModal()">Batal</button>
     </div>
   </div>
 </div>
@@ -2866,6 +2941,146 @@ function compressPhotoForOffline(dataUrl){
   });
 }
 
+// ============================================================
+// FITUR VISIT (Kunjungan Lapangan) — terpisah dari absensi
+// ============================================================
+let visitStream=null, visitPhoto=null, visitLocation=null;
+
+function openVisitModal(){
+  const el=document.getElementById('modal-visit');
+  el.style.display='';
+  el.classList.add('open');
+  document.getElementById('visit-keterangan').value='';
+  visitPhoto=null; visitLocation=null;
+  document.getElementById('cam-placeholder-visit').style.display='';
+  document.getElementById('camera-video-visit').style.display='none';
+  document.getElementById('camera-canvas-visit').style.display='none';
+  document.getElementById('cam-taken-badge-visit').style.display='none';
+  const row=document.getElementById('visit-loc-row');
+  row.className='map-info-row loading';
+  row.innerHTML='<i class="fas fa-spinner fa-spin"></i><div><div style="font-weight:700">Mengambil lokasi GPS...</div></div>';
+  getVisitLocation();
+}
+function closeVisitModal(){
+  document.getElementById('modal-visit').classList.remove('open');
+  if(visitStream){visitStream.getTracks().forEach(t=>t.stop());visitStream=null;}
+  visitPhoto=null; visitLocation=null;
+}
+function getVisitLocation(){
+  if(!navigator.geolocation){
+    const row=document.getElementById('visit-loc-row');
+    row.className='map-info-row luar';
+    row.innerHTML='<i class="fas fa-times-circle"></i><div><div style="font-weight:700">GPS tidak tersedia di perangkat ini</div></div>';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos=>{
+    visitLocation={lat:pos.coords.latitude,lng:pos.coords.longitude,acc:pos.coords.accuracy};
+    const row=document.getElementById('visit-loc-row');
+    row.className='map-info-row dalam';
+    row.innerHTML='<i class="fas fa-check-circle"></i><div><div style="font-weight:700">Lokasi berhasil diambil</div><div style="font-size:.75rem;margin-top:2px;opacity:.8">'+visitLocation.lat.toFixed(5)+', '+visitLocation.lng.toFixed(5)+' (±'+Math.round(visitLocation.acc||0)+'m)</div></div>';
+  }, err=>{
+    const row=document.getElementById('visit-loc-row');
+    row.className='map-info-row luar';
+    row.innerHTML='<i class="fas fa-times-circle"></i><div><div style="font-weight:700">Gagal mengambil lokasi</div><div style="font-size:.75rem;margin-top:2px;opacity:.8">'+(err.message||'Aktifkan izin lokasi lalu coba lagi')+'</div></div>';
+  }, {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+}
+function startCameraVisit(){
+  if(!navigator.mediaDevices){showToast('Kamera tidak tersedia','error');return;}
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false})
+    .then(s=>{
+      visitStream=s;
+      const v=document.getElementById('camera-video-visit');
+      v.srcObject=s; v.style.display='block';
+      document.getElementById('cam-placeholder-visit').style.display='none';
+      document.getElementById('cam-taken-badge-visit').style.display='none';
+    })
+    .catch(()=>showToast('Izin kamera ditolak','error'));
+}
+function capturePhotoVisit(){
+  const v=document.getElementById('camera-video-visit');
+  if(!visitStream||v.style.display==='none'){showToast('Aktifkan kamera dulu','warning');return;}
+  const c=document.getElementById('camera-canvas-visit');
+  const MAX_SIZE=800;
+  let w=v.videoWidth, h=v.videoHeight;
+  if(w>MAX_SIZE||h>MAX_SIZE){
+    if(w>h){h=Math.round(h*(MAX_SIZE/w));w=MAX_SIZE;}
+    else{w=Math.round(w*(MAX_SIZE/h));h=MAX_SIZE;}
+  }
+  c.width=w;c.height=h;c.getContext('2d').drawImage(v,0,0,w,h);
+  visitPhoto=c.toDataURL('image/jpeg',.65);
+  c.style.display='block'; v.style.display='none';
+  document.getElementById('cam-taken-badge-visit').style.display='block';
+  if(visitStream){visitStream.getTracks().forEach(t=>t.stop());visitStream=null;}
+}
+async function submitVisit(){
+  const keterangan=document.getElementById('visit-keterangan').value.trim();
+  if(!keterangan){showToast('Isi tujuan/keterangan visit dulu','warning');return;}
+  if(!visitPhoto){showToast('Ambil foto visit dulu','warning');return;}
+  if(!visitLocation){showToast('Lokasi belum tersedia, tunggu atau coba lagi','warning');return;}
+  const btn=document.getElementById('btn-submit-visit');
+  const origHTML=btn.innerHTML;
+  btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+  try{
+    const now=new Date();
+    const t=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+    let photoToSave=visitPhoto;
+    if(!navigator.onLine){ photoToSave=await compressPhotoForOffline(visitPhoto); }
+    const result=await saveVisitToFirebase({
+      uid:currentUser?.uid, userName:currentUser?.name, userRole:currentUser?.userRole,
+      date:getLocalDateStr(now), time:t,
+      keterangan,
+      lat:visitLocation.lat, lng:visitLocation.lng, accuracy:visitLocation.acc,
+      photoBase64:photoToSave,
+    });
+    closeVisitModal();
+    if(result && result.offline){
+      showToast('Visit tersimpan di perangkat (offline). Sync nanti saat ada internet.','warning');
+    } else {
+      showToast('Visit berhasil disimpan! Pukul '+t,'success');
+    }
+  }catch(err){
+    showToast('Gagal menyimpan visit: '+(err.message||err),'error');
+  }
+  btn.disabled=false; btn.innerHTML=origHTML;
+}
+async function saveVisitToFirebase(record){
+  const sanitized=Object.fromEntries(Object.entries(record).filter(([_,v])=>v!==undefined));
+  if(!navigator.onLine){ queueVisitPending(sanitized); return {offline:true}; }
+  if(firebaseDb){
+    try{
+      await firebaseDb.collection('visit').add({...sanitized, createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+      return {offline:false};
+    }catch(e){
+      queueVisitPending(sanitized);
+      return {offline:true, reason:e.message};
+    }
+  } else {
+    queueVisitPending(sanitized);
+    return {offline:true};
+  }
+}
+const VISIT_PENDING_KEY='visit_pending_sync';
+function queueVisitPending(record){
+  const list=JSON.parse(localStorage.getItem(VISIT_PENDING_KEY)||'[]');
+  list.push({...record,_queuedAt:new Date().toISOString(),_localId:'v'+Date.now()+Math.random().toString(36).slice(2,7)});
+  localStorage.setItem(VISIT_PENDING_KEY, JSON.stringify(list));
+}
+function getPendingVisit(){ return JSON.parse(localStorage.getItem(VISIT_PENDING_KEY)||'[]'); }
+async function syncPendingVisit(){
+  const list=getPendingVisit();
+  if(!list.length || !navigator.onLine || !firebaseDb) return;
+  const stillPending=[];
+  for(const rec of list){
+    try{
+      const {_queuedAt,_localId,...clean}=rec;
+      await firebaseDb.collection('visit').add({...clean, createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+    }catch(e){ stillPending.push(rec); }
+  }
+  localStorage.setItem(VISIT_PENDING_KEY, JSON.stringify(stillPending));
+  if(stillPending.length<list.length) showToast('Visit tertunda berhasil disinkronkan','success');
+}
+window.addEventListener('online', ()=>{ syncPendingVisit(); });
+
 // RIWAYAT
 function renderHistory(data,filter){
   const filtered=filter==='semua'?data:data.filter(h=>h.type===filter);
@@ -3439,6 +3654,98 @@ function renderLaporanTable(data){
 function filterLaporanTable(){if(laporanData.length)renderLaporanTable(laporanData);}
 
 // ==============================================
+// LAPORAN VISIT (terpisah dari rekap absensi)
+// ==============================================
+function switchLaporanMode(mode){
+  const chipA=document.getElementById('lap-chip-absensi'), chipV=document.getElementById('lap-chip-visit');
+  const secA=document.getElementById('laporan-absensi-section'), secV=document.getElementById('laporan-visit-section');
+  if(mode==='visit'){
+    secA.style.display='none'; secV.style.display='block';
+    chipV.style.background='#ecfeff';chipV.style.borderColor='#0891b2';chipV.style.color='#0891b2';
+    chipA.style.background='var(--card)';chipA.style.borderColor='var(--border)';chipA.style.color='var(--text-muted)';
+  } else {
+    secA.style.display='block'; secV.style.display='none';
+    chipA.style.background='var(--primary-light)';chipA.style.borderColor='var(--primary)';chipA.style.color='var(--primary)';
+    chipV.style.background='var(--card)';chipV.style.borderColor='var(--border)';chipV.style.color='var(--text-muted)';
+  }
+}
+function setPeriodeLaporanVisit(mode){
+  const now=new Date();
+  let dari, sampai;
+  if(mode==='today'){ dari=sampai=getLocalDateStr(now); }
+  else if(mode==='week'){
+    const day=now.getDay(); const diffMon=(day===0?-6:1-day);
+    const mon=new Date(now); mon.setDate(now.getDate()+diffMon);
+    const sun=new Date(mon); sun.setDate(mon.getDate()+6);
+    dari=getLocalDateStr(mon); sampai=getLocalDateStr(sun);
+  } else if(mode==='month'){
+    const y=now.getFullYear(), m=String(now.getMonth()+1).padStart(2,'0');
+    dari=`${y}-${m}-01`; sampai=`${y}-${m}-31`;
+  } else if(mode==='lastmonth'){
+    const d=new Date(now.getFullYear(), now.getMonth()-1, 1);
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0');
+    dari=`${y}-${m}-01`; sampai=`${y}-${m}-31`;
+  }
+  document.getElementById('visit-lap-dari').value=dari;
+  document.getElementById('visit-lap-sampai').value=sampai;
+}
+let laporanVisitData=[];
+async function loadLaporanVisit(){
+  if(!hasRole('manager')){showToast('Akses ditolak','error');return;}
+  if(!firebaseDb){showToast('Firebase belum terhubung','error');return;}
+  const start=document.getElementById('visit-lap-dari').value;
+  const end=document.getElementById('visit-lap-sampai').value;
+  if(!start||!end){showToast('Pilih tanggal dari dan sampai','warning');return;}
+  if(start>end){showToast('Tanggal dari tidak boleh lebih besar dari sampai','warning');return;}
+  const btn=document.querySelector('#laporan-visit-section .btn-laporan-load');
+  btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Memuat...';
+  try{
+    const snap=await firebaseDb.collection('visit').where('date','>=',start).where('date','<=',end).get();
+    laporanVisitData=snap.docs.map(d=>({id:d.id,...d.data()}))
+      .sort((a,b)=>{ if(a.date!==b.date) return a.date>b.date?1:-1; return (a.time||'')>(b.time||'')?1:-1; });
+    renderLaporanVisitTable(laporanVisitData);
+  }catch(e){
+    const msg=e.message.includes('index')||e.message.includes('Index')
+      ?'Perlu Firestore index — buka Firebase Console → Firestore → Indexes'
+      :'Gagal memuat: '+e.message;
+    showToast(msg,'error');
+    document.getElementById('laporan-visit-empty').style.display='block';
+    document.getElementById('laporan-visit-empty').innerHTML='<i class="fas fa-exclamation-circle" style="font-size:2rem;display:block;margin-bottom:12px;opacity:.5;color:var(--red)"></i><p>'+msg+'</p>';
+  }
+  btn.innerHTML='<i class="fas fa-search"></i> Tampilkan Laporan Visit';
+}
+function renderLaporanVisitTable(data){
+  const nameFilter=(document.getElementById('visit-lap-nama-filter').value||'').toLowerCase();
+  const filtered=nameFilter?data.filter(r=>(r.userName||'').toLowerCase().includes(nameFilter)):data;
+  const empty=document.getElementById('laporan-visit-empty');
+  const statsEl=document.getElementById('visit-rekap-stats');
+  const tableWrap=document.getElementById('visit-rekap-table-wrap');
+  if(!filtered.length){
+    empty.style.display='block'; empty.innerHTML='<i class="fas fa-inbox" style="font-size:2.5rem;display:block;margin-bottom:12px;opacity:.4"></i><p>Tidak ada data visit periode ini</p>';
+    statsEl.style.display='none'; tableWrap.style.display='none';
+    return;
+  }
+  empty.style.display='none'; statsEl.style.display='grid'; tableWrap.style.display='block';
+  document.getElementById('rs-visit-pegawai').textContent=new Set(filtered.map(r=>r.uid)).size;
+  document.getElementById('rs-visit-total').textContent=filtered.length;
+  const M=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  document.getElementById('visit-rekap-tbody').innerHTML=filtered.map((r,i)=>{
+    const d=new Date(r.date||'');
+    const tgl=isNaN(d)?r.date:d.getDate()+' '+M[d.getMonth()]+' '+d.getFullYear();
+    const lokBtn=(r.lat&&r.lng)?`<button class="rekap-map-btn" onclick="window.open('https://www.google.com/maps?q=${r.lat},${r.lng}','_blank')"><i class="fas fa-map-marker-alt"></i> Peta</button>`:'—';
+    const fotoBtn=r.photoBase64?`<button class="rekap-foto-btn" onclick="lihatVisitFoto(${i})"><i class="fas fa-camera"></i> Foto</button>`:'—';
+    return '<tr><td>'+(i+1)+'</td><td>'+(r.userName||'—')+'</td><td>'+tgl+'</td><td>'+(r.time||'—')+'</td><td style="max-width:180px;white-space:normal">'+(r.keterangan||'—')+'</td><td>'+lokBtn+'</td><td>'+fotoBtn+'</td></tr>';
+  }).join('');
+}
+function filterVisitTable(){ if(laporanVisitData.length) renderLaporanVisitTable(laporanVisitData); }
+function lihatVisitFoto(idx){
+  const r=laporanVisitData[idx];
+  if(!r||!r.photoBase64) return;
+  const w=window.open('','_blank');
+  w.document.write('<title>Foto Visit — '+(r.userName||'')+'</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="'+r.photoBase64+'" style="max-width:100%;max-height:100vh"></body>');
+}
+
+// ==============================================
 // EDIT ABSENSI MANUAL OLEH ADMIN/MANAGER
 // ==============================================
 let editAbsenCtx=null;
@@ -3606,6 +3913,74 @@ function exportExcel(){
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
   showToast('Export berhasil! Buka file .xls dengan Excel','success');
 }
+
+function exportExcelVisit(){
+  if(!laporanVisitData.length){showToast('Muat laporan visit dulu sebelum export','warning');return;}
+  const dari=document.getElementById('visit-lap-dari').value||'';
+  const sampai=document.getElementById('visit-lap-sampai').value||'';
+  const periodeLabel = dari===sampai ? dari : `${dari} sd ${sampai}`;
+  const nameFilter=(document.getElementById('visit-lap-nama-filter').value||'').toLowerCase();
+  const rows=(nameFilter?laporanVisitData.filter(r=>(r.userName||'').toLowerCase().includes(nameFilter)):laporanVisitData)
+    .slice().sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
+  const M=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  const hdr=['No','Nama Karyawan','Tanggal','Jam','Keterangan/Tujuan Visit','Latitude','Longitude','Foto (URL/Base64)'];
+  const esc=(s)=>String(s===undefined||s===null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  let bodyRows='';
+  rows.forEach((r,i)=>{
+    const d=new Date(r.date||'');const tgl=isNaN(d)?r.date:d.getDate()+' '+M[d.getMonth()]+' '+d.getFullYear();
+    const bg=i%2===0?'#ffffff':'#f0fdfa';
+    bodyRows+=`<tr style="background:${bg}">
+      <td style="text-align:center;border:1px solid #d1d5db">${i+1}</td>
+      <td style="border:1px solid #d1d5db">${esc(r.userName)}</td>
+      <td style="border:1px solid #d1d5db" x:fmt="@">${esc(tgl)}</td>
+      <td style="text-align:center;border:1px solid #d1d5db" x:fmt="@">${esc(r.time)}</td>
+      <td style="border:1px solid #d1d5db">${esc(r.keterangan)}</td>
+      <td style="text-align:center;border:1px solid #d1d5db">${esc(r.lat||'')}</td>
+      <td style="text-align:center;border:1px solid #d1d5db">${esc(r.lng||'')}</td>
+      <td style="border:1px solid #d1d5db;font-size:9px">${esc(r.photoBase64||'')}</td>
+    </tr>`;
+  });
+
+  const totalKaryawan=new Set(rows.map(r=>r.uid)).size;
+  const colCount=hdr.length;
+  const summaryRow=(label,val)=>`<tr><td style="font-weight:700;border:1px solid #d1d5db">${esc(label)}</td><td style="border:1px solid #d1d5db" colspan="${colCount-1}">${esc(val)}</td></tr>`;
+
+  const html=`<html xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="UTF-8">
+<!--[if gte mso 9]><xml>
+<x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+<x:Name>Rekap Visit</x:Name>
+<x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook>
+</xml><![endif]-->
+<style>
+  table{border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11px}
+  td,th{padding:4px 6px}
+</style>
+</head>
+<body>
+<table>
+  <tr><td colspan="${colCount}" style="font-size:16px;font-weight:700;color:#ffffff;background:#0891b2;text-align:center;padding:10px;border:1px solid #0e7490">LAPORAN REKAP VISIT PT. INDONESIA DWI SEMBILAN</td></tr>
+  <tr><td colspan="${colCount}" style="font-size:11px;font-weight:600;text-align:center;color:#475569;padding:4px;border:1px solid #d1d5db">Periode: ${esc(periodeLabel)} &nbsp;•&nbsp; Diekspor: ${esc(new Date().toLocaleString('id-ID'))}</td></tr>
+  <tr><td colspan="${colCount}" style="padding:2px;border:none"></td></tr>
+  <tr>${hdr.map(h=>`<th style="font-weight:700;color:#ffffff;background:#0891b2;border:1px solid #0e7490;text-align:center">${esc(h)}</th>`).join('')}</tr>
+  ${bodyRows}
+  <tr><td colspan="${colCount}" style="padding:4px;border:none"></td></tr>
+  <tr><td colspan="${colCount}" style="font-weight:700;font-size:13px;background:#cffafe;color:#0e7490;border:1px solid #d1d5db;padding:6px">RINGKASAN</td></tr>
+  ${summaryRow('Total Karyawan', totalKaryawan)}
+  ${summaryRow('Total Visit', rows.length)}
+  ${summaryRow('Periode', periodeLabel)}
+</table>
+</body></html>`;
+
+  const blob=new Blob(['\ufeff'+html],{type:'application/vnd.ms-excel;charset=utf-8'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='Rekap_Visit_'+dari+'_sd_'+sampai+'.xls';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  showToast('Export berhasil! Buka file .xls dengan Excel','success');
+}
+
 
 function exportHtmlFoto(){
   if(!laporanData.length){showToast('Muat laporan dulu sebelum export','warning');return;}
